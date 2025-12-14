@@ -13,6 +13,7 @@ let ROOM_ID = null;
 let ROOM_CODE = null;
 let PLAYER_ID = null;
 let IS_HOST = false;
+let VOTO_REALIZADO = null; // 🔥 NUEVO
 
 /* ============================================
    CREAR SALA
@@ -26,7 +27,9 @@ async function crearSala() {
             code,
             started: false,
             impostors_count: 1,
-            voting: false
+            voting: false,
+            estado: null,
+            resultado_texto: null
         })
         .select()
         .single();
@@ -50,13 +53,11 @@ async function crearSala() {
     PLAYER_ID = player.id;
 
     mostrarConfigSala();
-
-    // 🔥 NECESARIO PARA MOSTRAR PANTALLA DE SALA
     entrarSala();
 }
 
 /* ============================================
-   CONFIG DEL HOST
+   CONFIG HOST
 ============================================ */
 function mostrarConfigSala() {
     document.getElementById("stepHostConfig").style.display = "block";
@@ -119,23 +120,17 @@ async function unirseSala() {
 function entrarSala() {
     document.getElementById("stepCreate").style.display = "none";
     document.getElementById("stepJoin").style.display = "none";
-
-    // siempre mostrar stepGame
     document.getElementById("stepGame").style.display = "block";
+
     document.getElementById("room_code_display").innerHTML = "Sala: " + ROOM_CODE;
 
-    // 👇 MOSTRAR CONFIGURACION SOLO SI ES HOST
-    if (IS_HOST) {
-        document.getElementById("stepHostConfig").style.display = "block";
-    } else {
-        document.getElementById("stepHostConfig").style.display = "none";
-    }
+    if (IS_HOST) document.getElementById("stepHostConfig").style.display = "block";
+    else document.getElementById("stepHostConfig").style.display = "none";
 
     escucharJugadores();
     escucharPartida();
     setTimeout(mostrarRol, 500);
 }
-
 
 /* ============================================
    ESCUCHAR JUGADORES
@@ -165,12 +160,11 @@ async function actualizarJugadores() {
 }
 
 /* ============================================
-   INICIAR JUEGO (HOST)
+   INICIAR JUEGO
 ============================================ */
 async function iniciarJuego() {
     if (!IS_HOST) return;
 
-    // ocultar config
     document.getElementById("stepHostConfig").style.display = "none";
 
     const seleccionadas = [...document.querySelectorAll("#categorias input:checked")].map(i => i.value);
@@ -219,15 +213,13 @@ async function iniciarJuego() {
         .update({
             started: true,
             word: palabra,
-            voting: false
+            voting: false,
+            estado: null,
+            resultado_texto: null
         })
         .eq("id", ROOM_ID);
 
-    // 🔥 MOSTRAR PANEL DE JUEGO CORRECTAMENTE
-    document.getElementById("stepGame").style.display = "block";
-    document.getElementById("hostControls").style.display = "none";
     document.getElementById("startVoteControls").style.display = "block";
-
     mostrarRol();
 }
 
@@ -253,35 +245,15 @@ async function processRoomUpdate() {
         .eq("id", ROOM_ID)
         .single();
 
-    // si arranca partida → mostrar palabra o impostor
-    if (room.started) {
-        mostrarRol();
+    if (room.started) mostrarRol();
+
+    if (room.voting) mostrarPanelVotacion();
+    else document.getElementById("voteArea").style.display = "none";
+
+    if (room.resultado_texto) {
+        mostrarResultadoGlobal(room.resultado_texto);
     }
 
-    // si se inicia votación
-    if (room.voting) {
-        mostrarPanelVotacion();
-    }
-
-    // 🔥 manejar resultados globales para TODOS
-    switch (room.estado) {
-
-        case "impostor_encontrado":
-            mostrarResultadoGlobal("🚨 IMPOSTOR ENCONTRADO 🚨");
-            break;
-
-        case "gano_impostor":
-            mostrarResultadoGlobal("🎉 GANÓ EL IMPOSTOR 🎉");
-            break;
-
-        case "continua":
-            // limpia pantalla y sigue
-            document.getElementById("voteArea").style.display = "none";
-            document.getElementById("voteResults").style.display = "none";
-            break;
-    }
-
-    // reset visual si se reinicia sala
     if (!room.started && !room.voting) {
         document.getElementById("yourRole").innerHTML = "";
         document.getElementById("voteArea").style.display = "none";
@@ -293,7 +265,6 @@ async function processRoomUpdate() {
         }
     }
 }
-
 
 /* ============================================
    MOSTRAR ROL
@@ -321,16 +292,22 @@ async function mostrarRol() {
 }
 
 /* ============================================
-   INICIAR VOTACIÓN (HOST)
+   INICIAR VOTACIÓN
 ============================================ */
 async function iniciarVotacion() {
     if (!IS_HOST) return;
+
+    VOTO_REALIZADO = null;
 
     await supabase.from("votes").delete().eq("room_id", ROOM_ID);
 
     await supabase
         .from("rooms")
-        .update({voting: true})
+        .update({
+            voting: true,
+            estado: null,
+            resultado_texto: null
+        })
         .eq("id", ROOM_ID);
 }
 
@@ -357,13 +334,45 @@ async function mostrarPanelVotacion() {
     });
 
     document.getElementById("votePlayers").innerHTML = html;
+
+    mostrarEstadoVotos(); // 🔥 NUEVO
+}
+
+async function mostrarEstadoVotos() {
+
+    let {data: players} = await supabase
+        .from("players")
+        .select("*")
+        .eq("room_id", ROOM_ID);
+
+    let {data: votos} = await supabase
+        .from("votes")
+        .select("*")
+        .eq("room_id", ROOM_ID);
+
+    let html = "<hr><h5>Estado de votos</h5>";
+
+    players.forEach(p => {
+        const voto = votos.find(v => v.voter_id === p.id);
+
+        if (voto) {
+            let target = players.find(t => t.id === voto.target_id);
+            html += `<div>${p.name} votó a <b>${target.name}</b></div>`;
+        } else {
+            html += `<div>${p.name} <span class="text-danger">(falta votar)</span></div>`;
+        }
+    });
+
+    document.getElementById("votePlayers").innerHTML += html;
 }
 
 /* ============================================
    VOTAR
 ============================================ */
 async function votar(targetId) {
-    // Registrar voto
+
+    if (VOTO_REALIZADO) return;
+
     await supabase
         .from("votes")
         .insert({
@@ -372,38 +381,44 @@ async function votar(targetId) {
             target_id: targetId
         });
 
-    alert("Voto registrado");
+    VOTO_REALIZADO = targetId;
+
+    bloquearVotacion();
+    mostrarVotoPropio();
 
     await checkVotacionCompleta();
 }
 
+function bloquearVotacion() {
+    document.querySelectorAll("#votePlayers button")
+        .forEach(b => b.disabled = true);
+}
+
+function mostrarVotoPropio() {
+    document.getElementById("votePlayers").innerHTML =
+        `<h4 class="text-success">Votaste a: <b>${VOTO_REALIZADO}</b></h4>`;
+}
+
+/* ============================================
+   CHECK VOTACIÓN COMPLETA
+============================================ */
 async function checkVotacionCompleta() {
 
-    // Obtener vivos
-    let { data: vivos } = await supabase
+    let {data: vivos} = await supabase
         .from("players")
         .select("id")
         .eq("room_id", ROOM_ID)
         .eq("alive", true);
 
-    // Obtener votos existentes
-    let { data: votos } = await supabase
+    let {data: votos} = await supabase
         .from("votes")
         .select("voter_id")
         .eq("room_id", ROOM_ID);
 
-    // Si todos los vivos ya votaron → cerrar votación
-    if (votos.length >= vivos.length) {
-        if (IS_HOST) {
-            finalizarVotacion();
-        }
+    if (votos.length >= vivos.length && IS_HOST) {
+        finalizarVotacion();
     }
 }
-
-
-/* ============================================
-   TIMER
-============================================ */
 
 /* ============================================
    FINALIZAR VOTACIÓN
@@ -444,13 +459,14 @@ async function finalizarVotacion() {
 
     let eliminado = players.find(p => p.id === eliminadoId);
 
-    // 🟥 Caso: encontraron al impostor
+    // 🔥 Caso: impostor eliminado
     if (eliminado.role === "impostor") {
 
         await supabase
             .from("rooms")
             .update({
                 estado: "impostor_encontrado",
+                resultado_texto: `🚨 IMPOSTOR ENCONTRADO 🚨<br>Era <b>${eliminado.name}</b>`,
                 voting: false
             })
             .eq("id", ROOM_ID);
@@ -458,19 +474,22 @@ async function finalizarVotacion() {
         return;
     }
 
-    // 🟦 Caso: ganar impostor (solo quedan 2 vivos)
     let {data: vivosRestantes} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID)
         .eq("alive", true);
 
+    // 🔥 Caso: gana impostor
     if (vivosRestantes.length === 2) {
+
+        let imp = vivosRestantes.find(p => p.role === "impostor");
 
         await supabase
             .from("rooms")
             .update({
                 estado: "gano_impostor",
+                resultado_texto: `🎉 GANÓ EL IMPOSTOR 🎉<br>Era <b>${imp.name}</b>`,
                 voting: false
             })
             .eq("id", ROOM_ID);
@@ -478,11 +497,12 @@ async function finalizarVotacion() {
         return;
     }
 
-    // 🟩 Caso: sigue la partida
+    // 🔥 Caso continúa
     await supabase
         .from("rooms")
         .update({
             estado: "continua",
+            resultado_texto: `${eliminado.name} fue eliminado.<br>La partida continúa...`,
             voting: false
         })
         .eq("id", ROOM_ID);
@@ -508,16 +528,14 @@ function mostrarResultadoGlobal(html) {
 async function nuevaRonda() {
     if (!IS_HOST) return;
 
-    document.getElementById("startVoteControls").style.display = "none";
-    document.getElementById("voteArea").style.display = "none";
-    document.getElementById("voteResults").style.display = "none";
-
     await supabase
         .from("rooms")
         .update({
             started: false,
             word: null,
-            voting: false
+            voting: false,
+            estado: null,
+            resultado_texto: null
         })
         .eq("id", ROOM_ID);
 
@@ -526,7 +544,10 @@ async function nuevaRonda() {
         .update({alive: true, role: null})
         .eq("room_id", ROOM_ID);
 
+    document.getElementById("voteArea").style.display = "none";
+    document.getElementById("voteResults").style.display = "none";
     document.getElementById("yourRole").innerHTML = "";
+
     document.getElementById("stepHostConfig").style.display = "block";
     document.getElementById("hostControls").style.display = "block";
     document.getElementById("newRoundControls").style.display = "none";
