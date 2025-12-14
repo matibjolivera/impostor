@@ -52,7 +52,10 @@ async function crearSala() {
 
     PLAYER_ID = player.id;
 
+    // Mostrar config
     mostrarConfigSala();
+
+    entrarSala();
 }
 
 /* ============================================
@@ -83,7 +86,7 @@ async function unirseSala() {
     const code = document.getElementById("join_code").value;
     const name = document.getElementById("join_name").value;
 
-    let { data: room } = await supabase
+    let {data: room} = await supabase
         .from("rooms")
         .select("*")
         .eq("code", code)
@@ -98,7 +101,7 @@ async function unirseSala() {
     ROOM_CODE = room.code;
     IS_HOST = false;
 
-    let { data: player } = await supabase
+    let {data: player} = await supabase
         .from("players")
         .insert({
             room_id: ROOM_ID,
@@ -136,7 +139,7 @@ function escucharJugadores() {
         .channel("room_players_" + ROOM_ID)
         .on(
             "postgres_changes",
-            { event: "*", schema: "public", table: "players", filter: "room_id=eq." + ROOM_ID },
+            {event: "*", schema: "public", table: "players", filter: "room_id=eq." + ROOM_ID},
             actualizarJugadores
         )
         .subscribe();
@@ -145,7 +148,7 @@ function escucharJugadores() {
 }
 
 async function actualizarJugadores() {
-    let { data: players } = await supabase
+    let {data: players} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID)
@@ -175,14 +178,14 @@ async function iniciarJuego() {
 
     const impostorsCount = parseInt(document.getElementById("impostoresCount").value, 10);
 
-    let { data: players } = await supabase
+    let {data: players} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID);
 
     await supabase
         .from("players")
-        .update({ alive: true })
+        .update({alive: true})
         .eq("room_id", ROOM_ID);
 
     const palabra = pool[Math.floor(Math.random() * pool.length)];
@@ -227,14 +230,14 @@ function escucharPartida() {
         .channel("room_status_" + ROOM_ID)
         .on(
             "postgres_changes",
-            { event: "*", schema: "public", table: "rooms", filter: "id=eq." + ROOM_ID },
+            {event: "*", schema: "public", table: "rooms", filter: "id=eq." + ROOM_ID},
             processRoomUpdate
         )
         .subscribe();
 }
 
 async function processRoomUpdate() {
-    let { data: room } = await supabase
+    let {data: room} = await supabase
         .from("rooms")
         .select("*")
         .eq("id", ROOM_ID)
@@ -249,13 +252,13 @@ async function processRoomUpdate() {
    MOSTRAR ROL
 ============================================ */
 async function mostrarRol() {
-    let { data: me } = await supabase
+    let {data: me} = await supabase
         .from("players")
         .select("*")
         .eq("id", PLAYER_ID)
         .single();
 
-    let { data: room } = await supabase
+    let {data: room} = await supabase
         .from("rooms")
         .select("*")
         .eq("id", ROOM_ID)
@@ -280,7 +283,7 @@ async function iniciarVotacion() {
 
     await supabase
         .from("rooms")
-        .update({ voting: true })
+        .update({voting: true})
         .eq("id", ROOM_ID);
 }
 
@@ -292,7 +295,7 @@ async function mostrarPanelVotacion() {
     document.getElementById("voteArea").style.display = "block";
     document.getElementById("voteResults").style.display = "none";
 
-    let { data: players } = await supabase
+    let {data: players} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID)
@@ -349,12 +352,12 @@ function iniciarTimerVotos() {
 ============================================ */
 async function finalizarVotacion() {
 
-    let { data: votos } = await supabase
+    let {data: votos} = await supabase
         .from("votes")
         .select("*")
         .eq("room_id", ROOM_ID);
 
-    let { data: players } = await supabase
+    let {data: players} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID)
@@ -378,7 +381,7 @@ async function finalizarVotacion() {
 
     await supabase
         .from("players")
-        .update({ alive: false })
+        .update({alive: false})
         .eq("id", eliminadoId);
 
     let eliminado = players.find(p => p.id === eliminadoId);
@@ -390,7 +393,7 @@ async function finalizarVotacion() {
         return;
     }
 
-    let { data: vivosRestantes } = await supabase
+    let {data: vivosRestantes} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID)
@@ -444,7 +447,7 @@ async function nuevaRonda() {
 
     await supabase
         .from("players")
-        .update({ alive: true, role: null })
+        .update({alive: true, role: null})
         .eq("room_id", ROOM_ID);
 
     document.getElementById("yourRole").innerHTML = "";
