@@ -18,7 +18,7 @@ let IS_HOST = false;
 async function crearSala() {
     const code = Math.floor(Math.random() * 90000) + 10000;
 
-    let { data: room } = await supabase
+    let {data: room} = await supabase
         .from("rooms")
         .insert({
             code,
@@ -34,7 +34,7 @@ async function crearSala() {
 
     let hostName = prompt("Ingresá tu nombre (host):");
 
-    let { data: player } = await supabase
+    let {data: player} = await supabase
         .from("players")
         .insert({
             room_id: ROOM_ID,
@@ -232,9 +232,45 @@ async function mostrarRol() {
 
     if (!room.started) return;
 
+    if (IS_HOST) {
+        document.getElementById("hostControls").style.display = "none";
+        document.getElementById("stepHostConfig").style.display = "none";
+        document.getElementById("newRoundControls").style.display = "block";
+    }
+
     if (me.role === "impostor") {
         document.getElementById("yourRole").innerHTML = "🚨 SOS EL IMPOSTOR 🚨";
     } else {
         document.getElementById("yourRole").innerHTML = "Tu palabra: " + room.word;
     }
+
+}
+
+async function nuevaRonda() {
+
+    // mostrar controles solo al host
+    if (!IS_HOST) return;
+
+    // volver a mostrar controles de config
+    document.getElementById("stepHostConfig").style.display = "block";
+    document.getElementById("hostControls").style.display = "block";
+    document.getElementById("newRoundControls").style.display = "none";
+
+    // resetear room
+    await supabase
+        .from("rooms")
+        .update({
+            started: false,
+            word: null
+        })
+        .eq("id", ROOM_ID);
+
+    // resetear roles de jugadores
+    await supabase
+        .from("players")
+        .update({role: null})
+        .eq("room_id", ROOM_ID);
+
+    // limpiar el resultado mostrado
+    document.getElementById("yourRole").innerHTML = "";
 }
