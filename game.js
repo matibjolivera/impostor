@@ -122,10 +122,17 @@ async function unirseSala() {
 function entrarSala() {
     document.getElementById("stepCreate").style.display = "none";
     document.getElementById("stepJoin").style.display = "none";
-    document.getElementById("stepHostConfig").style.display = "none";
 
+    // siempre mostrar stepGame
     document.getElementById("stepGame").style.display = "block";
     document.getElementById("room_code_display").innerHTML = "Sala: " + ROOM_CODE;
+
+    // 👇 MOSTRAR CONFIGURACION SOLO SI ES HOST
+    if (IS_HOST) {
+        document.getElementById("stepHostConfig").style.display = "block";
+    } else {
+        document.getElementById("stepHostConfig").style.display = "none";
+    }
 
     escucharJugadores();
     escucharPartida();
