@@ -1,2 +1,2 @@
-window.SUPABASE_URL = "https://xxxxx.supabase.co";
-window.SUPABASE_KEY = "public-anon-key";
+window.SUPABASE_URL = "https://xqkodgxswaueyzhrxzpe.supabase.co";
+window.SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhxa29kZ3hzd2F1ZXl6aHJ4enBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3MzkzOTksImV4cCI6MjA4MTMxNTM5OX0.JeKvdT3Q2jOsNr_lDH6C0OMR1ZFc6T5VuYJbU6Ctass";
