@@ -14,9 +14,6 @@ let ROOM_CODE = null;
 let PLAYER_ID = null;
 let IS_HOST = false;
 
-let voteInterval = null;
-let voteTime = 20;
-
 /* ============================================
    CREAR SALA
 ============================================ */
@@ -341,14 +338,13 @@ async function mostrarPanelVotacion() {
     });
 
     document.getElementById("votePlayers").innerHTML = html;
-
-    if (IS_HOST) iniciarTimerVotos();
 }
 
 /* ============================================
    VOTAR
 ============================================ */
 async function votar(targetId) {
+    // Registrar voto
     await supabase
         .from("votes")
         .insert({
@@ -358,25 +354,37 @@ async function votar(targetId) {
         });
 
     alert("Voto registrado");
+
+    await checkVotacionCompleta();
 }
+
+async function checkVotacionCompleta() {
+
+    // Obtener vivos
+    let { data: vivos } = await supabase
+        .from("players")
+        .select("id")
+        .eq("room_id", ROOM_ID)
+        .eq("alive", true);
+
+    // Obtener votos existentes
+    let { data: votos } = await supabase
+        .from("votes")
+        .select("voter_id")
+        .eq("room_id", ROOM_ID);
+
+    // Si todos los vivos ya votaron → cerrar votación
+    if (votos.length >= vivos.length) {
+        if (IS_HOST) {
+            finalizarVotacion();
+        }
+    }
+}
+
 
 /* ============================================
    TIMER
 ============================================ */
-function iniciarTimerVotos() {
-    voteTime = 20;
-    document.getElementById("voteTimer").innerText = voteTime;
-
-    voteInterval = setInterval(async () => {
-        voteTime--;
-        document.getElementById("voteTimer").innerText = voteTime;
-
-        if (voteTime <= 0) {
-            clearInterval(voteInterval);
-            finalizarVotacion();
-        }
-    }, 1000);
-}
 
 /* ============================================
    FINALIZAR VOTACIÓN
