@@ -129,7 +129,8 @@ function entrarSala() {
 
     escucharJugadores();
     escucharPartida();
-    setTimeout(mostrarRol, 500);
+    escucharVotos();
+    setTimeout(mostrarRol, 100);
 }
 
 /* ============================================
@@ -158,6 +159,70 @@ async function actualizarJugadores() {
     document.getElementById("playersList").innerHTML =
         players.map(p => p.name + (p.id === PLAYER_ID ? " (vos)" : "")).join("<br>");
 }
+
+async function actualizarEstadoVotacion() {
+    if (!document.getElementById("voteArea").style.display.includes("block")) {
+        return;
+    }
+
+    let { data: votos } = await supabase
+        .from("votes")
+        .select("*")
+        .eq("room_id", ROOM_ID);
+
+    let { data: players } = await supabase
+        .from("players")
+        .select("*")
+        .eq("room_id", ROOM_ID);
+
+    /* ---------------------------
+       Encontrar mi voto
+    ----------------------------*/
+    const miVoto = votos.find(v => v.voter_id === PLAYER_ID);
+    if (miVoto) {
+        const target = players.find(p => p.id === miVoto.target_id);
+        document.getElementById("votoPropioBox").style.display = "block";
+        document.getElementById("votoPropioBox").innerHTML =
+            `🗳️ Ya votaste por <b>${target.name}</b>`;
+    }
+
+    /* ---------------------------
+       Bloquear botones tras votar
+    ----------------------------*/
+    if (miVoto) {
+        document.querySelectorAll("#votePlayers button").forEach(btn => {
+            btn.disabled = true;
+        });
+    }
+
+    /* ---------------------------
+       Mostrar quién votó a quién
+    ----------------------------*/
+    let votosHTML = "<h4>Votos</h4>";
+    votos.forEach(v => {
+        const votante = players.find(p => p.id === v.voter_id);
+        const elegido = players.find(p => p.id === v.target_id);
+        votosHTML += `<div class="vote-card">${votante.name} → <b>${elegido.name}</b></div>`;
+    });
+    document.getElementById("voteResults").innerHTML = votosHTML;
+
+    /* ---------------------------
+       Mostrar quién falta votar
+    ----------------------------*/
+    let vivos = players.filter(p => p.alive === true);
+    let idsQueVotaron = votos.map(v => v.voter_id);
+
+    let faltan = vivos.filter(p => !idsQueVotaron.includes(p.id));
+
+    if (faltan.length > 0) {
+        document.getElementById("quienFaltaBox").style.display = "block";
+        document.getElementById("quienFaltaBox").innerHTML =
+            "⏳ Faltan votar:<br>" + faltan.map(f => "• " + f.name).join("<br>");
+    } else {
+        document.getElementById("quienFaltaBox").style.display = "none";
+    }
+}
+
 
 /* ============================================
    INICIAR JUEGO
@@ -236,6 +301,26 @@ function escucharPartida() {
         )
         .subscribe();
 }
+
+/* ============================================
+   ESCUCHAR VOTOS EN TIEMPO REAL
+============================================ */
+function escucharVotos() {
+    supabase
+        .channel("room_votes_" + ROOM_ID)
+        .on(
+            "postgres_changes",
+            {
+                event: "*",
+                schema: "public",
+                table: "votes",
+                filter: "room_id=eq." + ROOM_ID
+            },
+            actualizarEstadoVotacion
+        )
+        .subscribe();
+}
+
 
 async function processRoomUpdate() {
 
@@ -371,7 +456,18 @@ async function mostrarEstadoVotos() {
 ============================================ */
 async function votar(targetId) {
 
-    if (VOTO_REALIZADO) return;
+    // Prevenir doble voto
+    let { data: yaVoto } = await supabase
+        .from("votes")
+        .select("*")
+        .eq("room_id", ROOM_ID)
+        .eq("voter_id", PLAYER_ID)
+        .maybeSingle();
+
+    if (yaVoto) {
+        alert("Ya votaste.");
+        return;
+    }
 
     await supabase
         .from("votes")
@@ -381,12 +477,13 @@ async function votar(targetId) {
             target_id: targetId
         });
 
-    VOTO_REALIZADO = targetId;
+    alert("Voto registrado");
 
-    bloquearVotacion();
-    mostrarVotoPropio();
+    // Desactivar botones inmediatamente
+    document.querySelectorAll("#votePlayers button").forEach(btn => btn.disabled = true);
 
-    await checkVotacionCompleta();
+    actualizarEstadoVotacion();
+    checkVotacionCompleta();
 }
 
 function bloquearVotacion() {
