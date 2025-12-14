@@ -164,6 +164,9 @@ async function actualizarJugadores() {
 async function iniciarJuego() {
     if (!IS_HOST) return;
 
+    // Ocultar config
+    document.getElementById("stepHostConfig").style.display = "none";
+
     const seleccionadas = [...document.querySelectorAll("#categorias input:checked")].map(i => i.value);
     if (seleccionadas.length === 0) {
         alert("Seleccioná al menos una categoría");
@@ -214,7 +217,7 @@ async function iniciarJuego() {
         })
         .eq("id", ROOM_ID);
 
-    // 🔥 AHORA EL HOST ENTRA A LA SALA LUEGO DE CONFIGURAR
+    // 🔥 MOSTRAR LA SALA Y EL BOTÓN DE VOTACIÓN
     entrarSala();
 }
 
