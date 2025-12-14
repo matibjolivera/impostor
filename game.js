@@ -52,8 +52,10 @@ async function crearSala() {
 
     PLAYER_ID = player.id;
 
-    // Mostrar config
     mostrarConfigSala();
+
+    // 🔥 NECESARIO PARA MOSTRAR PANTALLA DE SALA
+    entrarSala();
 }
 
 /* ============================================
