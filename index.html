@@ -71,11 +71,14 @@
     </div>
 
     <!-- Sala / juego -->
+    <!-- Sala / juego -->
     <div id="stepGame" class="card p-4 mb-4" style="display:none;">
+
         <h2 id="room_code_display" class="mb-3"></h2>
 
         <div id="playersList" class="mb-3"></div>
 
+        <!-- Solo host -->
         <div id="hostControls" class="mt-3">
             <button class="btn btn-danger w-100" onclick="iniciarJuego()">Iniciar partida</button>
         </div>
@@ -86,6 +89,7 @@
 
         <div id="yourRole" class="text-center mt-4"></div>
 
+        <!-- Panel de votación -->
         <div id="voteArea" style="display:none;" class="mt-4">
             <h3>¿Quién es el impostor?</h3>
             <div id="votePlayers"></div>
@@ -96,6 +100,7 @@
 
         <div id="voteResults" style="display:none;" class="mt-4"></div>
 
+        <!-- Solo host -->
         <div id="startVoteControls" style="display:none;" class="mt-3">
             <button class="btn btn-info w-100" onclick="iniciarVotacion()">Iniciar votación</button>
         </div>
