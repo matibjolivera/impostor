@@ -37,52 +37,66 @@
     <h1 class="text-center mb-4">🎭 El Impostor Online</h1>
 
     <!-- Crear sala -->
-<div id="stepCreate" class="card p-4 mb-4">
-  <h2>Crear sala</h2>
-  <button class="btn btn-primary w-100" onclick="crearSala()">Crear sala</button>
-</div>
+    <div id="stepCreate" class="card p-4 mb-4">
+        <h2>Crear sala</h2>
+        <button class="btn btn-primary w-100" onclick="crearSala()">Crear sala</button>
+    </div>
 
 
-<div id="stepJoin" class="card p-4 mb-4">
-  <h2>Unirse a una sala</h2>
+    <div id="stepJoin" class="card p-4 mb-4">
+        <h2>Unirse a una sala</h2>
 
-  <input id="join_code" class="form-control mb-2" placeholder="Código de sala">
-  <input id="join_name" class="form-control mb-3" placeholder="Tu nombre">
+        <input id="join_code" class="form-control mb-2" placeholder="Código de sala">
+        <input id="join_name" class="form-control mb-3" placeholder="Tu nombre">
 
-  <button class="btn btn-success w-100" onclick="unirseSala()">Entrar</button>
-</div>
+        <button class="btn btn-success w-100" onclick="unirseSala()">Entrar</button>
+    </div>
 
-<div id="stepHostConfig" class="card p-4 mb-4" style="display:none;">
-  <h2>Configuración de la sala</h2>
+    <div id="stepHostConfig" class="card p-4 mb-4" style="display:none;">
+        <h2>Configuración de la sala</h2>
 
-  <h4 class="mt-3">Categorías</h4>
-  <div id="categorias" class="ms-2"></div>
+        <h4 class="mt-3">Categorías</h4>
+        <div id="categorias" class="ms-2"></div>
 
-  <h4 class="mt-4">Cantidad de impostores</h4>
-  <select id="impostoresCount" class="form-select w-50">
-    <option value="1">1 impostor</option>
-    <option value="2">2 impostores</option>
-  </select>
+        <h4 class="mt-4">Cantidad de impostores</h4>
+        <select id="impostoresCount" class="form-select w-50">
+            <option value="1">1 impostor</option>
+            <option value="2">2 impostores</option>
+        </select>
 
-  <button class="btn btn-primary w-100 mt-4" onclick="entrarSala()">Continuar a la sala</button>
-</div>
+        <button class="btn btn-primary w-100 mt-4" onclick="entrarSala()">Continuar a la sala</button>
+    </div>
 
     <!-- Sala / juego -->
-<div id="stepGame" class="card p-4 mb-4" style="display:none;">
-  <h2 id="room_code_display" class="mb-3"></h2>
+    <div id="stepGame" class="card p-4 mb-4" style="display:none;">
+        <h2 id="room_code_display" class="mb-3"></h2>
 
-  <div id="playersList" class="mb-3"></div>
+        <div id="playersList" class="mb-3"></div>
 
-  <div id="hostControls" class="mt-3">
-    <button class="btn btn-danger w-100" onclick="iniciarJuego()">Iniciar partida</button>
-  </div>
+        <div id="hostControls" class="mt-3">
+            <button class="btn btn-danger w-100" onclick="iniciarJuego()">Iniciar partida</button>
+        </div>
 
-  <div id="newRoundControls" style="display:none;" class="mt-3">
-    <button class="btn btn-warning w-100" onclick="nuevaRonda()">Nueva ronda</button>
-  </div>
+        <div id="newRoundControls" style="display:none;" class="mt-3">
+            <button class="btn btn-warning w-100" onclick="nuevaRonda()">Nueva ronda</button>
+        </div>
 
-  <div id="yourRole" class="text-center mt-4"></div>
-</div>
+        <div id="yourRole" class="text-center mt-4"></div>
+
+        <div id="voteArea" style="display:none;" class="mt-4">
+            <h3>¿Quién es el impostor?</h3>
+            <div id="votePlayers"></div>
+            <div class="mt-3">
+                Tiempo restante: <span id="voteTimer">20</span>s
+            </div>
+        </div>
+
+        <div id="voteResults" style="display:none;" class="mt-4"></div>
+
+        <div id="startVoteControls" style="display:none;" class="mt-3">
+            <button class="btn btn-info w-100" onclick="iniciarVotacion()">Iniciar votación</button>
+        </div>
+    </div>
 </div>
 </body>
 </html>
