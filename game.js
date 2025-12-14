@@ -122,6 +122,7 @@ async function unirseSala() {
 function entrarSala() {
     document.getElementById("stepCreate").style.display = "none";
     document.getElementById("stepJoin").style.display = "none";
+    document.getElementById("stepHostConfig").style.display = "none";
 
     document.getElementById("stepGame").style.display = "block";
     document.getElementById("room_code_display").innerHTML = "Sala: " + ROOM_CODE;
@@ -130,6 +131,7 @@ function entrarSala() {
     escucharPartida();
     setTimeout(mostrarRol, 500);
 }
+
 
 /* ============================================
    ESCUCHAR JUGADORES
