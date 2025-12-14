@@ -164,7 +164,7 @@ async function actualizarJugadores() {
 async function iniciarJuego() {
     if (!IS_HOST) return;
 
-    // Ocultar config
+    // ocultar config
     document.getElementById("stepHostConfig").style.display = "none";
 
     const seleccionadas = [...document.querySelectorAll("#categorias input:checked")].map(i => i.value);
@@ -217,8 +217,12 @@ async function iniciarJuego() {
         })
         .eq("id", ROOM_ID);
 
-    // 🔥 MOSTRAR LA SALA Y EL BOTÓN DE VOTACIÓN
-    entrarSala();
+    // 🔥 MOSTRAR PANEL DE JUEGO CORRECTAMENTE
+    document.getElementById("stepGame").style.display = "block";
+    document.getElementById("hostControls").style.display = "none";
+    document.getElementById("startVoteControls").style.display = "block";
+
+    mostrarRol();
 }
 
 /* ============================================
