@@ -149,14 +149,22 @@ async function actualizarJugadores() {
 async function iniciarJuego() {
     if (!IS_HOST) return;
 
+    // ocultar config inmediatamente (sin esperar Supabase realtime)
+    document.getElementById("hostControls").style.display = "none";
+    document.getElementById("stepHostConfig").style.display = "none";
+    document.getElementById("newRoundControls").style.display = "block";
+
     // leer categorías seleccionadas
     const seleccionadas = [...document.querySelectorAll("#categorias input:checked")].map(i => i.value);
     if (seleccionadas.length === 0) {
         alert("Seleccioná al menos una categoría");
+        document.getElementById("hostControls").style.display = "block";
+        document.getElementById("stepHostConfig").style.display = "block";
+        document.getElementById("newRoundControls").style.display = "none";
         return;
     }
 
-    // juntar palabras de categorías
+    // juntar palabras
     let pool = [];
     seleccionadas.forEach(cat => {
         pool = pool.concat(window.PERSONAJES[cat]);
@@ -164,12 +172,12 @@ async function iniciarJuego() {
 
     const impostorsCount = parseInt(document.getElementById("impostoresCount").value, 10);
 
-    let {data: players} = await supabase
+    let { data: players } = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID);
 
-    // elegir palabra
+    // palabra
     const palabra = pool[Math.floor(Math.random() * pool.length)];
 
     // elegir impostores
@@ -182,7 +190,7 @@ async function iniciarJuego() {
         copy.splice(idx, 1);
     }
 
-    // actualizar roles en DB
+    // actualizar roles
     for (let p of players) {
         await supabase
             .from("players")
