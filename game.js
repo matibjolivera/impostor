@@ -125,6 +125,7 @@ function entrarSala() {
 
     escucharJugadores();
     escucharPartida();
+    setTimeout(mostrarRol, 500);
 }
 
 /* ============================================
