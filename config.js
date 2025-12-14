@@ -1,2 +1,2 @@
-const SUPABASE_URL = window.SUPABASE_URL;
-const SUPABASE_KEY = window.SUPABASE_KEY;
+window.SUPABASE_URL = "https://xxxxx.supabase.co";
+window.SUPABASE_KEY = "public-anon-key";
