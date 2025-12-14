@@ -246,23 +246,42 @@ function escucharPartida() {
 }
 
 async function processRoomUpdate() {
+
     let {data: room} = await supabase
         .from("rooms")
         .select("*")
         .eq("id", ROOM_ID)
         .single();
 
-    // Si el juego arrancó ➜ mostrar rol
+    // si arranca partida → mostrar palabra o impostor
     if (room.started) {
         mostrarRol();
     }
 
-    // Si se empezó votación
+    // si se inicia votación
     if (room.voting) {
         mostrarPanelVotacion();
     }
 
-    // Si se reinició la sala
+    // 🔥 manejar resultados globales para TODOS
+    switch (room.estado) {
+
+        case "impostor_encontrado":
+            mostrarResultadoGlobal("🚨 IMPOSTOR ENCONTRADO 🚨");
+            break;
+
+        case "gano_impostor":
+            mostrarResultadoGlobal("🎉 GANÓ EL IMPOSTOR 🎉");
+            break;
+
+        case "continua":
+            // limpia pantalla y sigue
+            document.getElementById("voteArea").style.display = "none";
+            document.getElementById("voteResults").style.display = "none";
+            break;
+    }
+
+    // reset visual si se reinicia sala
     if (!room.started && !room.voting) {
         document.getElementById("yourRole").innerHTML = "";
         document.getElementById("voteArea").style.display = "none";
@@ -425,13 +444,21 @@ async function finalizarVotacion() {
 
     let eliminado = players.find(p => p.id === eliminadoId);
 
+    // 🟥 Caso: encontraron al impostor
     if (eliminado.role === "impostor") {
-        mostrarResultadoGlobal(
-            `🚨 IMPOSTOR ENCONTRADO 🚨<br>El impostor era <b>${eliminado.name}</b>`
-        );
+
+        await supabase
+            .from("rooms")
+            .update({
+                estado: "impostor_encontrado",
+                voting: false
+            })
+            .eq("id", ROOM_ID);
+
         return;
     }
 
+    // 🟦 Caso: ganar impostor (solo quedan 2 vivos)
     let {data: vivosRestantes} = await supabase
         .from("players")
         .select("*")
@@ -439,16 +466,26 @@ async function finalizarVotacion() {
         .eq("alive", true);
 
     if (vivosRestantes.length === 2) {
-        let impostor = vivosRestantes.find(p => p.role === "impostor");
-        mostrarResultadoGlobal(
-            `🎉 EL IMPOSTOR GANÓ 🎉<br>Era <b>${impostor.name}</b>`
-        );
+
+        await supabase
+            .from("rooms")
+            .update({
+                estado: "gano_impostor",
+                voting: false
+            })
+            .eq("id", ROOM_ID);
+
         return;
     }
 
-    mostrarResultadoGlobal(
-        `<b>${eliminado.name}</b> fue eliminado.<br>La partida continúa...`
-    );
+    // 🟩 Caso: sigue la partida
+    await supabase
+        .from("rooms")
+        .update({
+            estado: "continua",
+            voting: false
+        })
+        .eq("id", ROOM_ID);
 }
 
 /* ============================================
