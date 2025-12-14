@@ -60,10 +60,12 @@ function mostrarConfigSala() {
 
     Object.keys(window.PERSONAJES).forEach(cat => {
         div.innerHTML += `
-      <label>
-        <input type="checkbox" value="${cat}">
-        ${cat}
-      </label><br>`;
+      <div class="form-check categoria-label">
+    <input class="form-check-input" type="checkbox" value="${cat}" id="cat_${cat}">
+    <label class="form-check-label" for="cat_${cat}">
+      ${cat}
+    </label>
+  </div><br>`;
     });
 }
 
