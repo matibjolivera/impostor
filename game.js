@@ -54,8 +54,6 @@ async function crearSala() {
 
     // Mostrar config
     mostrarConfigSala();
-
-    entrarSala();
 }
 
 /* ============================================
@@ -166,9 +164,6 @@ async function actualizarJugadores() {
 async function iniciarJuego() {
     if (!IS_HOST) return;
 
-    document.getElementById("hostControls").style.display = "none";
-    document.getElementById("stepHostConfig").style.display = "none";
-
     const seleccionadas = [...document.querySelectorAll("#categorias input:checked")].map(i => i.value);
     if (seleccionadas.length === 0) {
         alert("Seleccioná al menos una categoría");
@@ -180,14 +175,14 @@ async function iniciarJuego() {
 
     const impostorsCount = parseInt(document.getElementById("impostoresCount").value, 10);
 
-    let {data: players} = await supabase
+    let { data: players } = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID);
 
     await supabase
         .from("players")
-        .update({alive: true})
+        .update({ alive: true })
         .eq("room_id", ROOM_ID);
 
     const palabra = pool[Math.floor(Math.random() * pool.length)];
@@ -219,9 +214,8 @@ async function iniciarJuego() {
         })
         .eq("id", ROOM_ID);
 
-    if (IS_HOST) {
-        document.getElementById("startVoteControls").style.display = "block";
-    }
+    // 🔥 AHORA EL HOST ENTRA A LA SALA LUEGO DE CONFIGURAR
+    entrarSala();
 }
 
 /* ============================================
