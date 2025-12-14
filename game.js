@@ -365,30 +365,37 @@ function escucharVotos() {
 
 async function processRoomUpdate() {
 
-    let {data: room} = await supabase
+    const { data: room } = await supabase
         .from("rooms")
         .select("*")
         .eq("id", ROOM_ID)
         .single();
 
-    if (room.started) mostrarRol();
+    // 1) Si la partida comenzó, mostrar rol
+    if (room.started) {
+        mostrarRol();
+    }
 
-    if (room.voting) mostrarPanelVotacion();
-    else document.getElementById("voteArea").style.display = "none";
+    // 2) Si está en votación, mostrar panel
+    if (room.voting) {
+        mostrarPanelVotacion();
+    } else {
+        document.getElementById("voteArea").style.display = "none";
+    }
 
+    // 3) Si hay un resultado final, mostrarlo
     if (room.resultado_texto) {
         mostrarResultadoGlobal(room.resultado_texto);
     }
 
-    if (!room.voting && room.estado === "continua") {
-        mostrarResultadoGlobal(`<b>${eliminadoGlobal}</b> fue eliminado. La partida sigue.`);
-
-        // mostrar botón continuar ronda a todos
+    // 4) Si la partida continúa (alguien eliminado pero no se terminó)
+    if (room.estado === "continua") {
         document.getElementById("newRoundControls").style.display = "block";
     }
 
-
+    // 5) Si la partida NO está iniciada y no está votando → volver a pantalla host
     if (!room.started && !room.voting) {
+
         document.getElementById("yourRole").innerHTML = "";
         document.getElementById("voteArea").style.display = "none";
         document.getElementById("voteResults").style.display = "none";
@@ -399,6 +406,7 @@ async function processRoomUpdate() {
         }
     }
 }
+
 
 /* ============================================
    MOSTRAR ROL
@@ -545,19 +553,22 @@ function mostrarVotoPropio() {
 ============================================ */
 async function checkVotacionCompleta() {
 
-    let {data: vivos} = await supabase
+    const { data: vivos } = await supabase
         .from("players")
         .select("id")
         .eq("room_id", ROOM_ID)
         .eq("alive", true);
 
-    let {data: votos} = await supabase
+    const { data: votos } = await supabase
         .from("votes")
         .select("voter_id")
         .eq("room_id", ROOM_ID);
 
-    if (votos.length >= vivos.length && IS_HOST) {
-        finalizarVotacion();
+    // si todos votaron, el host decide
+    if (votos.length === vivos.length) {
+        if (IS_HOST) {
+            finalizarVotacion();
+        }
     }
 }
 
@@ -566,41 +577,46 @@ async function checkVotacionCompleta() {
 ============================================ */
 async function finalizarVotacion() {
 
-    let {data: votos} = await supabase
+    // Traemos votos
+    const { data: votos } = await supabase
         .from("votes")
         .select("*")
         .eq("room_id", ROOM_ID);
 
-    let {data: players} = await supabase
+    // Traemos TODOS los players (no solo vivos)
+    const { data: players } = await supabase
         .from("players")
         .select("*")
-        .eq("room_id", ROOM_ID)
-        .eq("alive", true);
+        .eq("room_id", ROOM_ID);
 
+    // Conteo
     let conteo = {};
     votos.forEach(v => {
         conteo[v.target_id] = (conteo[v.target_id] || 0) + 1;
     });
 
+    // Elegir eliminado
     let eliminadoId = null;
     let max = -1;
 
     players.forEach(p => {
-        let votosP = conteo[p.id] || 0;
-        if (votosP > max) {
-            max = votosP;
+        const v = conteo[p.id] || 0;
+        if (v > max) {
+            max = v;
             eliminadoId = p.id;
         }
     });
 
+    // Encontrar player eliminado
+    const eliminado = players.find(p => p.id === eliminadoId);
+
+    // Marcarlo eliminado
     await supabase
         .from("players")
-        .update({alive: false})
+        .update({ alive: false })
         .eq("id", eliminadoId);
 
-    let eliminado = players.find(p => p.id === eliminadoId);
-
-    // 🔥 Caso: impostor eliminado
+    // Caso impostor muerto
     if (eliminado.role === "impostor") {
 
         await supabase
@@ -615,22 +631,22 @@ async function finalizarVotacion() {
         return;
     }
 
-    let {data: vivosRestantes} = await supabase
+    // Recalcular vivos restantes luego de eliminar
+    const { data: vivosRestantes } = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID)
         .eq("alive", true);
 
-    // 🔥 Caso: gana impostor
+    // Caso: impostor gana
     if (vivosRestantes.length === 2) {
-
-        let imp = vivosRestantes.find(p => p.role === "impostor");
+        const impostor = vivosRestantes.find(p => p.role === "impostor");
 
         await supabase
             .from("rooms")
             .update({
                 estado: "gano_impostor",
-                resultado_texto: `🎉 GANÓ EL IMPOSTOR 🎉<br>Era <b>${imp.name}</b>`,
+                resultado_texto: `🎉 GANÓ EL IMPOSTOR 🎉<br>Era <b>${impostor.name}</b>`,
                 voting: false
             })
             .eq("id", ROOM_ID);
@@ -638,15 +654,13 @@ async function finalizarVotacion() {
         return;
     }
 
+    // Caso: partida continúa
     await supabase
         .from("rooms")
         .update({
-            voting: false,
-            estado: eliminado.role === "impostor"
-                ? "impostor_encontrado"
-                : (vivosRestantes.length === 2
-                    ? "gano_impostor"
-                    : "continua")
+            estado: "continua",
+            resultado_texto: `${eliminado.name} fue eliminado. La partida continúa.`,
+            voting: false
         })
         .eq("id", ROOM_ID);
 }
