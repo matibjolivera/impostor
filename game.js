@@ -23,7 +23,7 @@ let voteTime = 20;
 async function crearSala() {
     const code = Math.floor(Math.random() * 90000) + 10000;
 
-    let { data: room } = await supabase
+    let {data: room} = await supabase
         .from("rooms")
         .insert({
             code,
@@ -40,7 +40,7 @@ async function crearSala() {
 
     const hostName = prompt("Ingresá tu nombre (host):");
 
-    let { data: player } = await supabase
+    let {data: player} = await supabase
         .from("players")
         .insert({
             room_id: ROOM_ID,
@@ -187,14 +187,14 @@ async function iniciarJuego() {
 
     const impostorsCount = parseInt(document.getElementById("impostoresCount").value, 10);
 
-    let { data: players } = await supabase
+    let {data: players} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID);
 
     await supabase
         .from("players")
-        .update({ alive: true })
+        .update({alive: true})
         .eq("room_id", ROOM_ID);
 
     const palabra = pool[Math.floor(Math.random() * pool.length)];
@@ -249,18 +249,32 @@ function escucharPartida() {
 }
 
 async function processRoomUpdate() {
-    let { data: room } = await supabase
+    let {data: room} = await supabase
         .from("rooms")
         .select("*")
         .eq("id", ROOM_ID)
         .single();
 
+    // Si el juego arrancó ➜ mostrar rol
     if (room.started) {
         mostrarRol();
     }
 
+    // Si se empezó votación
     if (room.voting) {
         mostrarPanelVotacion();
+    }
+
+    // Si se reinició la sala
+    if (!room.started && !room.voting) {
+        document.getElementById("yourRole").innerHTML = "";
+        document.getElementById("voteArea").style.display = "none";
+        document.getElementById("voteResults").style.display = "none";
+
+        if (IS_HOST) {
+            document.getElementById("stepHostConfig").style.display = "block";
+            document.getElementById("hostControls").style.display = "block";
+        }
     }
 }
 
@@ -469,4 +483,6 @@ async function nuevaRonda() {
 
     document.getElementById("yourRole").innerHTML = "";
     document.getElementById("stepHostConfig").style.display = "block";
+    document.getElementById("hostControls").style.display = "block";
+    document.getElementById("newRoundControls").style.display = "none";
 }
