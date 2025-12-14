@@ -553,22 +553,27 @@ function mostrarVotoPropio() {
 ============================================ */
 async function checkVotacionCompleta() {
 
-    const { data: vivos } = await supabase
+    let { data: vivos } = await supabase
         .from("players")
         .select("id")
         .eq("room_id", ROOM_ID)
         .eq("alive", true);
 
-    const { data: votos } = await supabase
+    let { data: votos } = await supabase
         .from("votes")
         .select("voter_id")
         .eq("room_id", ROOM_ID);
 
-    // si todos votaron, el host decide
-    if (votos.length === vivos.length) {
+    // Evitar duplicados por seguridad
+    const votantesUnicos = [...new Set(votos.map(v => v.voter_id))];
+
+    if (votantesUnicos.length === vivos.length) {
+        console.log("✔ Todos votaron:", votantesUnicos.length);
         if (IS_HOST) {
             finalizarVotacion();
         }
+    } else {
+        console.log("⏳ Faltan votos:", vivos.length - votantesUnicos.length);
     }
 }
 
