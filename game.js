@@ -249,16 +249,21 @@ function escucharPartida() {
 }
 
 async function processRoomUpdate() {
-    let {data: room} = await supabase
+    let { data: room } = await supabase
         .from("rooms")
         .select("*")
         .eq("id", ROOM_ID)
         .single();
 
+    if (room.started) {
+        mostrarRol();
+    }
+
     if (room.voting) {
         mostrarPanelVotacion();
     }
 }
+
 
 /* ============================================
    MOSTRAR ROL
