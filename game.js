@@ -255,6 +255,10 @@ async function iniciarJuego() {
         .eq("id", ROOM_ID);
 
     hideMessage();
+
+    if (IS_HOST) {
+        document.getElementById("newRoundControls").style.display = "block";
+    }
 }
 
 /* ============================================
@@ -596,4 +600,56 @@ function mostrarResultadoGlobal(html) {
     document.getElementById("voteArea").style.display = "none";
     document.getElementById("voteResults").innerHTML = html;
     document.getElementById("voteResults").style.display = "block";
+}
+
+/* ============================================
+   NUEVA RONDA (RESET SIN SALIR DE LA SALA)
+============================================ */
+async function nuevaRonda() {
+    if (!IS_HOST) return;
+
+    showMessage("🔄 Reiniciando la ronda…");
+
+    // 1. Reset rooms
+    await supabase
+        .from("rooms")
+        .update({
+            started: false,
+            voting: false,
+            word: null,
+            estado: null,
+            resultado_texto: null
+        })
+        .eq("id", ROOM_ID);
+
+    // 2. Reset jugadores
+    await supabase
+        .from("players")
+        .update({
+            alive: true,
+            role: null
+        })
+        .eq("room_id", ROOM_ID);
+
+    // 3. Limpiar votos
+    await supabase
+        .from("votes")
+        .delete()
+        .eq("room_id", ROOM_ID);
+
+    // 4. Reset de UI
+    PLAYER_ALIVE = true;
+
+    resetUIVotacion();
+    document.getElementById("voteArea").style.display = "none";
+    document.getElementById("voteResults").style.display = "none";
+    document.getElementById("yourRole").innerHTML = "";
+    document.getElementById("eliminatedScreen").style.display = "none";
+
+    // Mostrar controles del host para iniciar una partida nueva
+    document.getElementById("hostControls").style.display = IS_HOST ? "block" : "none";
+    document.getElementId("startVoteControls").style.display = "none";
+    document.getElementById("newRoundControls").style.display = "none";
+
+    hideMessage();
 }
