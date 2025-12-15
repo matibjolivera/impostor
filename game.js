@@ -6,7 +6,7 @@ const SUPABASE_KEY = window.SUPABASE_KEY;
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* ============================================
-   VARIABLES
+   VARIABLES GLOBALES
 ============================================ */
 let ROOM_ID = null;
 let ROOM_CODE = null;
@@ -25,13 +25,14 @@ function showMessage(msg) {
 
 function hideMessage() {
     const box = document.getElementById("systemMessage");
-    box.style.display = "none";
     box.innerHTML = "";
+    box.style.display = "none";
 }
 
 function showEliminatedScreen() {
     document.getElementById("eliminatedScreen").innerHTML =
         "<h2>❌ Fuiste eliminado ❌</h2><p>Esperá el final de la partida…</p>";
+
     document.getElementById("eliminatedScreen").style.display = "block";
 
     document.getElementById("yourRole").innerHTML = "";
@@ -44,12 +45,15 @@ function showEliminatedScreen() {
 function resetUIVotacion() {
     document.getElementById("votePlayers").innerHTML = "";
     document.getElementById("votePlayers").style.display = "block";
-    document.getElementById("votoPropioBox").style.display = "none";
+
     document.getElementById("votoPropioBox").innerHTML = "";
-    document.getElementById("quienFaltaBox").style.display = "none";
+    document.getElementById("votoPropioBox").style.display = "none";
+
     document.getElementById("quienFaltaBox").innerHTML = "";
-    document.getElementById("voteResults").style.display = "none";
+    document.getElementById("quienFaltaBox").style.display = "none";
+
     document.getElementById("voteResults").innerHTML = "";
+    document.getElementById("voteResults").style.display = "none";
 }
 
 /* ============================================
@@ -151,6 +155,7 @@ function entrarSala() {
     document.getElementById("stepCreate").style.display = "none";
     document.getElementById("stepJoin").style.display = "none";
     document.getElementById("stepGame").style.display = "block";
+
     document.getElementById("room_code_display").innerHTML = "Sala: " + ROOM_CODE;
 
     if (IS_HOST) {
@@ -172,7 +177,8 @@ function entrarSala() {
 function escucharJugadores() {
     supabase.channel("room_players_" + ROOM_ID)
         .on("postgres_changes", {
-            event: "*", schema: "public",
+            event: "*",
+            schema: "public",
             table: "players",
             filter: "room_id=eq." + ROOM_ID
         }, actualizarJugadores)
@@ -198,10 +204,10 @@ async function actualizarJugadores() {
 async function iniciarJuego() {
     if (!IS_HOST) return;
 
-    showMessage("🔄 Preparando partida…");
+    showMessage("🔄 Asignando roles…");
 
     const seleccionadas = [...document.querySelectorAll("#categorias input:checked")].map(i => i.value);
-    if (!seleccionadas.length) return alert("Seleccioná categorías");
+    if (!seleccionadas.length) return alert("Seleccioná al menos una categoría");
 
     let pool = [];
     seleccionadas.forEach(cat => pool = pool.concat(window.PERSONAJES[cat]));
@@ -215,21 +221,19 @@ async function iniciarJuego() {
 
     const palabra = pool[Math.floor(Math.random() * pool.length)];
 
-    let vivos = [...players];
-    let impostor = vivos[Math.floor(Math.random() * vivos.length)].id;
+    const impostorId = players[Math.floor(Math.random() * players.length)].id;
 
     for (const p of players) {
-        await supabase
-            .from("players")
-            .update({role: p.id === impostor ? "impostor" : "player"})
+        await supabase.from("players")
+            .update({role: p.id === impostorId ? "impostor" : "player"})
             .eq("id", p.id);
     }
 
     await supabase.from("rooms")
         .update({
             started: true,
-            word: palabra,
             voting: false,
+            word: palabra,
             estado: null,
             resultado_texto: null
         })
@@ -239,38 +243,76 @@ async function iniciarJuego() {
 }
 
 /* ============================================
-   ESCUCHAR ROOM
+   ESCUCHAR CAMBIOS EN LA ROOM
 ============================================ */
 function escucharPartida() {
     supabase.channel("room_status_" + ROOM_ID)
         .on("postgres_changes", {
-            event: "*", schema: "public",
-            table: "rooms",
-            filter: "id=eq." + ROOM_ID
+            event: "*", schema: "public", table: "rooms", filter: "id=eq." + ROOM_ID
         }, processRoomUpdate)
         .subscribe();
 }
 
 async function processRoomUpdate() {
+
     const {data: room} = await supabase
         .from("rooms")
         .select("*")
         .eq("id", ROOM_ID)
         .single();
 
-    if (!PLAYER_ALIVE) return; // muerto → no actualiza nada visual
+    // ===============================
+    // si el jugador está muerto
+    // ===============================
+    if (!PLAYER_ALIVE) return;
 
-    if (room.started) await mostrarRol();
+    await mostrarRol();
 
     if (room.voting) {
         await mostrarPanelVotacion();
         await actualizarEstadoVotacion();
-    } else {
-        document.getElementById("voteArea").style.display = "none";
+        document.getElementById("startVoteControls").style.display = "none";
+        return;
     }
+
+    document.getElementById("voteArea").style.display = "none";
 
     if (room.resultado_texto) {
         mostrarResultadoGlobal(room.resultado_texto);
+        document.getElementById("startVoteControls").style.display = "none";
+        return;
+    }
+
+    const {data: me} = await supabase
+        .from("players")
+        .select("*")
+        .eq("id", PLAYER_ID)
+        .single();
+
+    PLAYER_ALIVE = me.alive;
+
+    if (!me.alive) {
+        showEliminatedScreen();
+        return;
+    }
+
+    // ===============================
+    // HOST VIVO — mostrar iniciar votación
+    // ===============================
+    if (IS_HOST) {
+        if (room.started && !room.voting && !room.resultado_texto) {
+            document.getElementById("startVoteControls").style.display = "block";
+        } else {
+            document.getElementById("startVoteControls").style.display = "none";
+        }
+
+        if (room.started) {
+            document.getElementById("hostControls").style.display = "none";
+        }
+    } else {
+        document.getElementById("hostControls").style.display = "none";
+        document.getElementById("startVoteControls").style.display = "none";
+        document.getElementById("newRoundControls").style.display = "none";
     }
 }
 
@@ -327,7 +369,7 @@ async function iniciarVotacion() {
 }
 
 /* ============================================
-   MOSTRAR PANEL VOTACIÓN
+   MOSTRAR PANEL DE VOTACIÓN
 ============================================ */
 async function mostrarPanelVotacion() {
     if (!PLAYER_ALIVE) return;
@@ -368,9 +410,10 @@ async function votar(targetId) {
 }
 
 /* ============================================
-   ESTADO DE VOTACIÓN
+   ESTADO DE LA VOTACIÓN
 ============================================ */
 async function actualizarEstadoVotacion() {
+
     if (!PLAYER_ALIVE) return;
 
     const {data: votos} = await supabase
@@ -385,13 +428,14 @@ async function actualizarEstadoVotacion() {
 
     if (!votos.length) return;
 
+    // voto propio
     const miVoto = votos.find(v => v.voter_id === PLAYER_ID);
-
     if (miVoto) {
-        const target = players.find(p => p.id === miVoto.target_id);
+        const t = players.find(p => p.id === miVoto.target_id);
         document.getElementById("votoPropioBox").innerHTML =
-            `🗳️ Votaste a <b>${target.name}</b>`;
+            `🗳️ Votaste a <b>${t.name}</b>`;
         document.getElementById("votoPropioBox").style.display = "block";
+
         document.querySelectorAll("#votePlayers button").forEach(b => b.disabled = true);
     }
 
@@ -407,22 +451,26 @@ async function actualizarEstadoVotacion() {
 
     const vivos = players.filter(p => p.alive);
     const idsVotaron = votos.map(v => v.voter_id);
+
     const faltan = vivos.filter(p => !idsVotaron.includes(p.id));
 
     if (faltan.length) {
-        document.getElementById("quienFaltaBox").style.display = "block";
         document.getElementById("quienFaltaBox").innerHTML =
             faltan.map(f => "• " + f.name).join("<br>");
+        document.getElementById("quienFaltaBox").style.display = "block";
+    } else {
+        document.getElementById("quienFaltaBox").style.display = "none";
     }
 }
 
 /* ============================================
-   ESCUCHAR VOTOS
+   ESCUCHAR VOTOS EN TIEMPO REAL
 ============================================ */
 function escucharVotos() {
     supabase.channel("room_votes_" + ROOM_ID)
         .on("postgres_changes", {
-            event: "*", schema: "public",
+            event: "*",
+            schema: "public",
             table: "votes",
             filter: "room_id=eq." + ROOM_ID
         }, actualizarEstadoVotacion)
@@ -433,6 +481,7 @@ function escucharVotos() {
    CHECK FIN DE VOTACIÓN
 ============================================ */
 async function checkVotacionCompleta() {
+
     const {data: vivos} = await supabase
         .from("players")
         .select("id")
@@ -455,6 +504,7 @@ async function checkVotacionCompleta() {
    FINALIZAR VOTACIÓN
 ============================================ */
 async function finalizarVotacion() {
+
     const {data: votos} = await supabase
         .from("votes")
         .select("*")
@@ -472,9 +522,9 @@ async function finalizarVotacion() {
     let max = -1;
 
     players.forEach(p => {
-        const votosRecib = conteo[p.id] || 0;
-        if (votosRecib > max) {
-            max = votosRecib;
+        const cantidad = conteo[p.id] || 0;
+        if (cantidad > max) {
+            max = cantidad;
             eliminadoId = p.id;
         }
     });
@@ -491,13 +541,11 @@ async function finalizarVotacion() {
     }
 
     if (eliminado.role === "impostor") {
-        await supabase.from("rooms")
-            .update({
-                estado: "fin",
-                resultado_texto: `🚨 IMPOSTOR ELIMINADO 🚨<br>Era <b>${eliminado.name}</b>`,
-                voting: false
-            })
-            .eq("id", ROOM_ID);
+        await supabase.from("rooms").update({
+            estado: "fin",
+            resultado_texto: `🚨 IMPOSTOR ELIMINADO 🚨<br>Era <b>${eliminado.name}</b>`,
+            voting: false
+        }).eq("id", ROOM_ID);
         return;
     }
 
@@ -510,28 +558,24 @@ async function finalizarVotacion() {
     if (vivosRestantes.length === 2) {
         const imp = vivosRestantes.find(p => p.role === "impostor");
 
-        await supabase.from("rooms")
-            .update({
-                estado: "fin",
-                resultado_texto: `🎉 GANÓ EL IMPOSTOR 🎉<br>Era <b>${imp.name}</b>`,
-                voting: false
-            })
-            .eq("id", ROOM_ID);
+        await supabase.from("rooms").update({
+            estado: "fin",
+            resultado_texto: `🎉 GANÓ EL IMPOSTOR 🎉<br>Era <b>${imp.name}</b>`,
+            voting: false
+        }).eq("id", ROOM_ID);
 
         return;
     }
 
-    await supabase.from("rooms")
-        .update({
-            estado: "continua",
-            resultado_texto: `${eliminado.name} fue eliminado. La partida continúa.`,
-            voting: false
-        })
-        .eq("id", ROOM_ID);
+    await supabase.from("rooms").update({
+        estado: "continua",
+        resultado_texto: `${eliminado.name} fue eliminado. La partida continúa.`,
+        voting: false
+    }).eq("id", ROOM_ID);
 }
 
 /* ============================================
-   MOSTRAR RESULTADO GLOBAL
+   MOSTRAR RESULTADOS FINALES
 ============================================ */
 function mostrarResultadoGlobal(html) {
     document.getElementById("voteArea").style.display = "none";

@@ -17,18 +17,13 @@
 
     <style>
         body { padding-top: 30px; }
+
         #yourRole {
             margin-top: 40px;
             font-size: 32px;
             font-weight: bold;
         }
-        .vote-card {
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 10px;
-            background: #fff;
-        }
+
         #votoPropioBox {
             background: #e7ffe7;
             padding: 12px;
@@ -37,6 +32,7 @@
             margin-top: 10px;
             display: none;
         }
+
         #quienFaltaBox {
             background: #fff5d1;
             padding: 12px;
@@ -44,6 +40,17 @@
             border: 1px solid #ffdd6b;
             margin-top: 10px;
             display: none;
+        }
+
+        #eliminatedScreen {
+            display:none;
+            background:#ffe6e6;
+            border:1px solid #ffaaaa;
+            border-radius:10px;
+            padding:20px;
+            margin-top:20px;
+            font-size:20px;
+            font-weight:bold;
         }
     </style>
 </head>
@@ -75,12 +82,6 @@
         <h4 class="mt-3">Categorías</h4>
         <div id="categorias" class="ms-2"></div>
 
-        <h4 class="mt-4">Cantidad de impostores</h4>
-        <select id="impostoresCount" class="form-select w-50">
-            <option value="1">1 impostor</option>
-            <option value="2">2 impostores</option>
-        </select>
-
         <p class="mt-3 text-muted">
             Cuando estés listo, tocá “Iniciar partida”.
         </p>
@@ -96,7 +97,7 @@
                 font-weight:bold;">
     </div>
 
-    <!-- Sala y juego -->
+    <!-- JUEGO -->
     <div id="stepGame" class="card p-4 mb-4" style="display:none;">
 
         <h2 id="room_code_display" class="mb-3"></h2>
@@ -104,50 +105,40 @@
         <h4>Jugadores:</h4>
         <div id="playersList" class="mb-3"></div>
 
-        <!-- Botón host -->
+        <!-- Controles HOST (solo si está vivo y antes de iniciar partida) -->
         <div id="hostControls" class="mt-3" style="display:none;">
             <button class="btn btn-danger w-100" onclick="iniciarJuego()">Iniciar partida</button>
         </div>
 
-        <!-- Nueva ronda -->
-        <div id="newRoundControls" style="display:none;" class="mt-3">
-            <button class="btn btn-warning w-100" onclick="nuevaRonda()">Nueva ronda</button>
+        <!-- Iniciar votación (solo host y solo si está vivo) -->
+        <div id="startVoteControls" style="display:none;" class="mt-3">
+            <button class="btn btn-info w-100" onclick="iniciarVotacion()">Iniciar votación</button>
         </div>
 
         <!-- Rol del jugador -->
         <div id="yourRole" class="text-center mt-4"></div>
 
-        <!-- ❌ PANTALLA DE ELIMINADO (NUEVA) -->
-        <div id="eliminatedScreen"
-             class="text-center mt-4 p-4"
-             style="display:none;
-                    background:#ffe6e6;
-                    border:1px solid #ffaaaa;
-                    border-radius:10px;">
-        </div>
+        <!-- Pantalla de eliminado -->
+        <div id="eliminatedScreen"></div>
 
         <!-- PANEL DE VOTACIÓN -->
         <div id="voteArea" style="display:none;" class="mt-4">
             <h3>¿Quién es el impostor?</h3>
 
-            <div id="votePlayers"></div>
+            <div id="votePlayers" class="mt-3"></div>
 
             <div id="votoPropioBox" class="mt-2"></div>
             <div id="quienFaltaBox" class="mt-2 text-danger"></div>
 
-            <div id="votosEnVivo" style="display:none;" class="mt-3">
-                <h5>Votos en vivo:</h5>
-                <div id="votosLista"></div>
-            </div>
+            <!-- Lista de votos -->
+            <div id="voteResults" class="mt-4 text-center fs-4 fw-bold" style="display:none;"></div>
         </div>
 
-        <!-- RESULTADOS -->
-        <div id="voteResults" style="display:none;" class="mt-4 text-center fs-4 fw-bold"></div>
-
-        <!-- Iniciar votación (HOST PERO SOLO SI ESTÁ VIVO) -->
-        <div id="startVoteControls" style="display:none;" class="mt-3">
-            <button class="btn btn-info w-100" onclick="iniciarVotacion()">Iniciar votación</button>
+        <!-- NUEVA RONDA (solo host vivo, si querés activar después) -->
+        <div id="newRoundControls" style="display:none;" class="mt-3">
+            <button class="btn btn-warning w-100" onclick="nuevaRonda()">Nueva ronda</button>
         </div>
+
     </div>
 </div>
 </body>
