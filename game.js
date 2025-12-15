@@ -62,33 +62,48 @@ function resetUIVotacion() {
 async function crearSala() {
     const code = Math.floor(Math.random() * 90000) + 10000;
 
-    const {data: room} = await supabase
+    const { data: room, error: roomError } = await supabase
         .from("rooms")
         .insert({
             code,
             started: false,
             voting: false,
             estado: null,
-            resultado_texto: null
+            resultado_texto: null,
+            word: null,
+            impostors_count: 1   // <--- NECESARIO
         })
         .select()
         .single();
+
+    if (roomError || !room) {
+        console.error("ERROR CREANDO ROOM:", roomError);
+        alert("Error creando sala");
+        return;
+    }
 
     ROOM_ID = room.id;
     ROOM_CODE = room.code;
     IS_HOST = true;
 
-    const hostName = prompt("Ingresá tu nombre (host):");
+    const hostName = prompt("Ingresá tu nombre (host):") || "Host";
 
-    const {data: player} = await supabase
+    const { data: player, error: playerError } = await supabase
         .from("players")
         .insert({
             room_id: ROOM_ID,
             name: hostName,
-            alive: true
+            alive: true,
+            role: null
         })
         .select()
         .single();
+
+    if (playerError || !player) {
+        console.error("ERROR CREANDO PLAYER:", playerError);
+        alert("Error creando jugador");
+        return;
+    }
 
     PLAYER_ID = player.id;
 
