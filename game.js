@@ -19,7 +19,7 @@ let IS_HOST = false;
 async function crearSala() {
     const code = Math.floor(Math.random() * 90000) + 10000;
 
-    const { data: room } = await supabase
+    const {data: room} = await supabase
         .from("rooms")
         .insert({
             code,
@@ -38,7 +38,7 @@ async function crearSala() {
 
     const hostName = prompt("Ingresá tu nombre (host):");
 
-    const { data: player } = await supabase
+    const {data: player} = await supabase
         .from("players")
         .insert({
             room_id: ROOM_ID,
@@ -79,7 +79,7 @@ async function unirseSala() {
     const code = document.getElementById("join_code").value;
     const name = document.getElementById("join_name").value;
 
-    const { data: room } = await supabase
+    const {data: room} = await supabase
         .from("rooms")
         .select("*")
         .eq("code", code)
@@ -94,7 +94,7 @@ async function unirseSala() {
     ROOM_CODE = room.code;
     IS_HOST = false;
 
-    const { data: player } = await supabase
+    const {data: player} = await supabase
         .from("players")
         .insert({
             room_id: ROOM_ID,
@@ -119,12 +119,22 @@ function entrarSala() {
 
     document.getElementById("room_code_display").innerHTML = "Sala: " + ROOM_CODE;
 
-    document.getElementById("stepHostConfig").style.display = IS_HOST ? "block" : "none";
+    // 🔥 Mostrar config solo al host
+    if (IS_HOST) {
+        document.getElementById("stepHostConfig").style.display = "block";
+        document.getElementById("hostControls").style.display = "block";
+        document.getElementById("startVoteControls").style.display = "none";
+        document.getElementById("newRoundControls").style.display = "none";
+    } else {
+        document.getElementById("stepHostConfig").style.display = "none";
+        document.getElementById("hostControls").style.display = "none";
+        document.getElementById("startVoteControls").style.display = "none";
+        document.getElementById("newRoundControls").style.display = "none";
+    }
 
     escucharJugadores();
     escucharPartida();
     escucharVotos();
-
     setTimeout(mostrarRol, 100);
 }
 
@@ -144,7 +154,7 @@ function escucharJugadores() {
 }
 
 async function actualizarJugadores() {
-    const { data: players } = await supabase
+    const {data: players} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID)
@@ -174,12 +184,12 @@ async function iniciarJuego() {
 
     const impostorsCount = parseInt(document.getElementById("impostoresCount").value);
 
-    const { data: players } = await supabase
+    const {data: players} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID);
 
-    await supabase.from("players").update({ alive: true }).eq("room_id", ROOM_ID);
+    await supabase.from("players").update({alive: true}).eq("room_id", ROOM_ID);
 
     const palabra = pool[Math.floor(Math.random() * pool.length)];
 
@@ -195,7 +205,7 @@ async function iniciarJuego() {
     for (const p of players) {
         await supabase
             .from("players")
-            .update({ role: impostores.includes(p.id) ? "impostor" : "player" })
+            .update({role: impostores.includes(p.id) ? "impostor" : "player"})
             .eq("id", p.id);
     }
 
@@ -229,7 +239,7 @@ function escucharPartida() {
 }
 
 async function processRoomUpdate() {
-    const { data: room } = await supabase
+    const {data: room} = await supabase
         .from("rooms")
         .select("*")
         .eq("id", ROOM_ID)
@@ -249,8 +259,13 @@ async function processRoomUpdate() {
     }
 
     if (room.estado === "continua") {
-        document.getElementById("newRoundControls").style.display = "block";
+        if (IS_HOST) {
+            document.getElementById("newRoundControls").style.display = "block";
+        } else {
+            document.getElementById("newRoundControls").style.display = "none";
+        }
     }
+
 
     if (!room.started && !room.voting) {
         document.getElementById("yourRole").innerHTML = "";
@@ -262,19 +277,26 @@ async function processRoomUpdate() {
             document.getElementById("hostControls").style.display = "block";
         }
     }
+
+    if (!IS_HOST) {
+        document.getElementById("hostControls").style.display = "none";
+        document.getElementById("startVoteControls").style.display = "none";
+        document.getElementById("newRoundControls").style.display = "none";
+    }
+
 }
 
 /* ============================================
    MOSTRAR ROL
 ============================================ */
 async function mostrarRol() {
-    const { data: me } = await supabase
+    const {data: me} = await supabase
         .from("players")
         .select("*")
         .eq("id", PLAYER_ID)
         .single();
 
-    const { data: room } = await supabase
+    const {data: room} = await supabase
         .from("rooms")
         .select("*")
         .eq("id", ROOM_ID)
@@ -305,17 +327,9 @@ async function iniciarVotacion() {
         })
         .eq("id", ROOM_ID);
 
-    limpiarUIVotos();
+    await resetUIVotacion()
 }
 
-function limpiarUIVotos() {
-    document.getElementById("votePlayers").innerHTML = "";
-    document.getElementById("votoPropioBox").style.display = "none";
-    document.getElementById("quienFaltaBox").style.display = "none";
-    document.getElementById("votosEnVivo").style.display = "none";
-    document.getElementById("votosLista").innerHTML = "";
-    document.getElementById("voteResults").style.display = "none";
-}
 
 /* ============================================
    MOSTRAR PANEL DE VOTACIÓN
@@ -324,7 +338,7 @@ async function mostrarPanelVotacion() {
     limpiarUIVotos();
     document.getElementById("voteArea").style.display = "block";
 
-    const { data: players } = await supabase
+    const {data: players} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID)
@@ -348,12 +362,12 @@ async function mostrarPanelVotacion() {
 ============================================ */
 async function actualizarEstadoVotacion() {
 
-    const { data: votos } = await supabase
+    const {data: votos} = await supabase
         .from("votes")
         .select("*")
         .eq("room_id", ROOM_ID);
 
-    const { data: players } = await supabase
+    const {data: players} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID);
@@ -431,13 +445,13 @@ async function votar(targetId) {
    CHECK COMPLETA LA VOTACIÓN
 ============================================ */
 async function checkVotacionCompleta() {
-    const { data: vivos } = await supabase
+    const {data: vivos} = await supabase
         .from("players")
         .select("id")
         .eq("room_id", ROOM_ID)
         .eq("alive", true);
 
-    const { data: votos } = await supabase
+    const {data: votos} = await supabase
         .from("votes")
         .select("voter_id")
         .eq("room_id", ROOM_ID);
@@ -453,11 +467,11 @@ async function checkVotacionCompleta() {
    FINALIZAR VOTACIÓN
 ============================================ */
 async function finalizarVotacion() {
-    const { data: votos } = await supabase.from("votes")
+    const {data: votos} = await supabase.from("votes")
         .select("*")
         .eq("room_id", ROOM_ID);
 
-    const { data: players } = await supabase.from("players")
+    const {data: players} = await supabase.from("players")
         .select("*")
         .eq("room_id", ROOM_ID);
 
@@ -478,7 +492,7 @@ async function finalizarVotacion() {
     const eliminado = players.find(p => p.id === elId);
 
     await supabase.from("players")
-        .update({ alive: false })
+        .update({alive: false})
         .eq("id", elId);
 
     if (eliminado.role === "impostor") {
@@ -492,7 +506,7 @@ async function finalizarVotacion() {
         return;
     }
 
-    const { data: vivosRestantes } = await supabase
+    const {data: vivosRestantes} = await supabase
         .from("players")
         .select("*")
         .eq("room_id", ROOM_ID)
@@ -551,7 +565,7 @@ async function nuevaRonda() {
         .eq("id", ROOM_ID);
 
     await supabase.from("players")
-        .update({ alive: true, role: null })
+        .update({alive: true, role: null})
         .eq("room_id", ROOM_ID);
 
     document.getElementById("voteArea").style.display = "none";
@@ -561,4 +575,23 @@ async function nuevaRonda() {
     document.getElementById("stepHostConfig").style.display = "block";
     document.getElementById("hostControls").style.display = "block";
     document.getElementById("newRoundControls").style.display = "none";
+
+    resetUIVotacion();
+}
+
+function resetUIVotacion() {
+    document.getElementById("votePlayers").innerHTML = "";
+    document.getElementById("votePlayers").style.display = "block";
+
+    document.getElementById("votoPropioBox").style.display = "none";
+    document.getElementById("votoPropioBox").innerHTML = "";
+
+    document.getElementById("quienFaltaBox").style.display = "none";
+    document.getElementById("quienFaltaBox").innerHTML = "";
+
+    document.getElementById("voteResults").style.display = "none";
+    document.getElementById("voteResults").innerHTML = "";
+
+    document.getElementById("votosEnVivo").style.display = "none";
+    document.getElementById("votosLista").innerHTML = "";
 }
