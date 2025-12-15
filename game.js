@@ -10,23 +10,26 @@ let STATE = {
     room: null,
     me: null,
     players: [],
-    votes: []
+    votes: [],
+    isHost: false
 };
 
 // AYUDAS DE NAVEGACIÓN
 const ROUTES = {
     CREATE: 'stepCreate',
     JOIN: 'stepJoin',
-    HOST_CONFIG: 'stepHostConfig',
     GAME: 'stepGame'
+    // stepHostConfig lo ignoramos, lo inyectaremos dinámicamente
 };
 
 /* ============================================
    UI HELPERS GENÉRICOS
 ============================================ */
 function showView(viewId) {
-    [ROUTES.CREATE, ROUTES.JOIN, ROUTES.HOST_CONFIG, ROUTES.GAME].forEach(id => {
-        document.getElementById(id).style.display = (id === viewId) ? 'block' : 'none';
+    // Ocultar todas las vistas principales
+    [ROUTES.CREATE, ROUTES.JOIN, ROUTES.GAME, 'stepHostConfig'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.style.display = (id === viewId) ? 'block' : 'none';
     });
 }
 
@@ -83,29 +86,9 @@ async function crearSala() {
     if (pError) return alert("Error al crear jugador: " + pError.message);
 
     iniciarSesionLocal(room, player);
-    mostrarConfigHost();
 }
 
-// 2. CONFIGURACIÓN INICIAL DEL HOST
-function mostrarConfigHost() {
-    const div = document.getElementById("categorias");
-    div.innerHTML = "";
-
-    // Generar checkboxes desde window.PERSONAJES (definido en personajes.js)
-    if (window.PERSONAJES) {
-        Object.keys(window.PERSONAJES).forEach(cat => {
-            div.innerHTML += `
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" value="${cat}" id="cat_${cat}">
-                  <label class="form-check-label" for="cat_${cat}">${cat}</label>
-                </div>`;
-        });
-    }
-
-    showView(ROUTES.HOST_CONFIG);
-}
-
-// 3. UNIRSE A SALA
+// 2. UNIRSE A SALA
 async function unirseSala() {
     const code = document.getElementById("join_code").value;
     const name = document.getElementById("join_name").value;
@@ -138,27 +121,14 @@ async function unirseSala() {
     iniciarSesionLocal(room, player);
 }
 
-// 4. SESIÓN LOCAL Y REALTIME
+// 3. SESIÓN LOCAL Y REALTIME
 function iniciarSesionLocal(room, player) {
     STATE.room = room;
     STATE.me = player;
+    // Cálculo inicial de host (si creó la sala es host seguro)
+    STATE.isHost = (room.created_at === player.created_at) || true;
 
-    // Guardar IDs en memoria global para facilitar acceso rápido si fuera necesario,
-    // pero intentaremos usar siempre STATE.
-    window.ROOM_ID = room.id;
-    window.PLAYER_ID = player.id;
-    window.IS_HOST = (room.created_at === player.created_at) || true; // Simplificación, mejor lógica abajo
-
-    // Determinación estricta de host: El primer jugador creado es host, o si acabamos de crear la sala.
-    // Para simplificar: el que creó la sala (crearSala) sabe que es host.
-    // Los que se unen (unirseSala) no lo son.
-    // Como el código original usaba variable global, la seteamos en el flujo.
-    // (Nota: crearSala setea IS_HOST = true implícitamente al ejecutar lógica de host).
-
-    // Configurar suscripciones
     setupRealtime();
-
-    // Carga inicial de datos
     sincronizarEstado();
 }
 
@@ -168,9 +138,7 @@ function iniciarSesionLocal(room, player) {
 function setupRealtime() {
     if (!STATE.room) return;
 
-    // Un solo canal para todo (Room, Players, Votes)
     const channel = supabase.channel(`game_${STATE.room.id}`);
-
     const tables = ['rooms', 'players', 'votes'];
 
     tables.forEach(table => {
@@ -178,15 +146,13 @@ function setupRealtime() {
             'postgres_changes',
             { event: '*', schema: 'public', table: table, filter: `room_id=eq.${STATE.room.id}` },
             (payload) => {
-                // ANTE CUALQUIER CAMBIO: Recargamos todo el estado.
-                // Esto previene inconsistencias y race conditions.
-                console.log(`Cambio detectado en ${table}`, payload);
+                console.log(`Cambio en ${table}`, payload);
                 sincronizarEstado();
             }
         );
     });
 
-    // Suscripción específica para ROOM por ID (ya que el filtro room_id a veces falla en la tabla rooms misma si no se configura bien)
+    // Listener extra específico para updates de la room misma
     channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${STATE.room.id}` },
@@ -199,25 +165,22 @@ function setupRealtime() {
 async function sincronizarEstado() {
     if (!STATE.room?.id) return;
 
-    // 1. Obtener Room
-    const { data: room } = await supabase.from("rooms").select("*").eq("id", STATE.room.id).single();
-    // 2. Obtener Jugadores
-    const { data: players } = await supabase.from("players").select("*").eq("room_id", STATE.room.id).order('created_at');
-    // 3. Obtener Votos
-    const { data: votes } = await supabase.from("votes").select("*").eq("room_id", STATE.room.id);
+    // Fetch paralelo para velocidad
+    const [roomRes, playersRes, votesRes] = await Promise.all([
+        supabase.from("rooms").select("*").eq("id", STATE.room.id).single(),
+        supabase.from("players").select("*").eq("room_id", STATE.room.id).order('created_at'),
+        supabase.from("votes").select("*").eq("room_id", STATE.room.id)
+    ]);
 
-    // Actualizar Estado Global
-    if (room) STATE.room = room;
-    if (players) STATE.players = players;
-    STATE.votes = votes || [];
+    if (roomRes.data) STATE.room = roomRes.data;
+    if (playersRes.data) STATE.players = playersRes.data;
+    STATE.votes = votesRes.data || [];
 
-    // Actualizar referencia de "ME" (por si morí o cambió mi rol)
-    const updatedMe = players.find(p => p.id === STATE.me.id);
+    // Actualizar referencia de "ME"
+    const updatedMe = STATE.players.find(p => p.id === STATE.me.id);
     if (updatedMe) STATE.me = updatedMe;
 
-    // Determinar si soy HOST (el primer jugador de la lista suele ser el host)
-    // O si venimos del flujo crearSala.
-    // Asumiremos que el jugador más antiguo es el host para robustez.
+    // Determinar Host (el más antiguo de la sala)
     if (STATE.players.length > 0) {
         const oldest = STATE.players.reduce((prev, curr) =>
             (new Date(curr.created_at) < new Date(prev.created_at) ? curr : prev)
@@ -225,10 +188,9 @@ async function sincronizarEstado() {
         STATE.isHost = (STATE.me.id === oldest.id);
     }
 
-    // RENDERIZAR UI
     renderUI();
 
-    // Lógica automática del Host (Checkear fin de votación)
+    // Check automático de fin de votación (Solo host)
     if (STATE.isHost && STATE.room.voting) {
         checkVotacionCompletaHost();
     }
@@ -238,22 +200,25 @@ async function sincronizarEstado() {
    RENDER UI (LA MÁQUINA DE ESTADOS)
 ============================================ */
 function renderUI() {
-    // 1. Mostrar pantalla de juego
     showView(ROUTES.GAME);
 
     // Header
     document.getElementById("room_code_display").innerText = `Sala: ${STATE.room.code}`;
 
-    // Lista de Jugadores
+    // Lista de Jugadores con indicadores
     const listHtml = STATE.players.map(p => {
         let status = p.alive ? "😊" : "💀";
         let meTag = (p.id === STATE.me.id) ? " (Vos)" : "";
         let hostTag = (STATE.players[0]?.id === p.id) ? "👑" : "";
-        return `<div>${status} ${p.name} ${meTag} ${hostTag}</div>`;
+
+        // Estilo visual si está muerto
+        let style = p.alive ? "" : "text-decoration: line-through; color: gray;";
+
+        return `<div style="${style}">${status} ${p.name} ${meTag} ${hostTag}</div>`;
     }).join("");
     document.getElementById("playersList").innerHTML = listHtml;
 
-    // Resetear visibilidad de secciones críticas
+    // Referencias a elementos del DOM
     const els = {
         hostControls: document.getElementById("hostControls"),
         startVoteControls: document.getElementById("startVoteControls"),
@@ -264,43 +229,46 @@ function renderUI() {
         eliminatedScreen: document.getElementById("eliminatedScreen")
     };
 
-    // Ocultar todo por defecto
-    Object.values(els).forEach(el => el.style.display = 'none');
+    // Resetear visibilidad (todo oculto por defecto)
+    Object.values(els).forEach(el => el && (el.style.display = 'none'));
 
-    // ESTADO: ELIMINADO (Overlay)
+    // CASO ESPECIAL: JUGADOR MUERTO
     if (!STATE.me.alive) {
         els.eliminatedScreen.style.display = 'block';
-        els.eliminatedScreen.innerHTML = "<h2>💀 ESTÁS MUERTO 💀</h2><p>Podés ver, pero no votar.</p>";
-        // Nota: No retornamos aquí para permitir que el jugador muerto vea los resultados
+        els.eliminatedScreen.innerHTML = "<h2>💀 ESTÁS MUERTO 💀</h2><p>Podés ver, pero no votar ni hablar.</p>";
     }
 
     // --- FASE 1: LOBBY (Esperando iniciar) ---
     if (!STATE.room.started) {
-        if (STATE.isHost) els.hostControls.style.display = 'block';
         els.yourRole.innerHTML = "<h3>Esperando al anfitrión...</h3>";
-        return; // Fin del render para lobby
+
+        if (STATE.isHost) {
+            els.hostControls.style.display = 'block';
+            // INYECTAR CONFIGURACIÓN AQUÍ PARA QUE EL HOST LA VEA
+            injectHostConfig();
+        }
+        return;
     }
 
-    // --- FASE 2: PARTIDA EN CURSO ---
+    // --- FASE 2: JUEGO EN CURSO ---
 
-    // Mostrar Rol
+    // Mostrar Rol (si estás vivo)
     if (STATE.me.alive) {
         els.yourRole.style.display = 'block';
         if (STATE.me.role === 'impostor') {
-            els.yourRole.innerHTML = `<div class="alert alert-danger">🤫 SOS EL IMPOSTOR</div>`;
+            els.yourRole.innerHTML = `<div class="alert alert-danger fs-1">🤫 SOS EL IMPOSTOR</div>`;
         } else {
-            els.yourRole.innerHTML = `<div class="alert alert-info">Palabra secreta: <strong>${STATE.room.word}</strong></div>`;
+            els.yourRole.innerHTML = `<div class="alert alert-info fs-3">Tu palabra: <br><strong>${STATE.room.word}</strong></div>`;
         }
     } else {
-        els.yourRole.innerHTML = ""; // Muertos no ven rol recordatorio para no confundir
+        els.yourRole.innerHTML = "";
     }
 
-    // Si hay un resultado global (Alguien murió o ganó alguien)
+    // Mostrar Resultados Globales (si existen)
     if (STATE.room.resultado_texto && STATE.room.estado !== null) {
         els.voteResults.innerHTML = STATE.room.resultado_texto;
         els.voteResults.style.display = 'block';
 
-        // Si el juego terminó o es pausa entre rondas, el host puede reiniciar
         if (STATE.isHost) {
             els.newRoundControls.style.display = 'block';
         }
@@ -313,20 +281,49 @@ function renderUI() {
         return;
     }
 
-    // --- FASE 4: JUEGO ACTIVO (DISCUSIÓN) ---
-    // Si no se está votando y no hay resultado, es momento de discutir.
-    // El host puede iniciar votación.
-    if (STATE.isHost && STATE.me.alive) { // Solo host vivo puede iniciar votación
+    // --- FASE 4: DISCUSIÓN (Botón iniciar votación) ---
+    if (STATE.isHost && STATE.me.alive) {
         els.startVoteControls.style.display = 'block';
     }
+}
+
+// Inyecta las categorías DENTRO del panel de control del host en el Lobby
+function injectHostConfig() {
+    const container = document.getElementById("hostControls");
+    const existingConfig = document.getElementById("injected-config");
+
+    if (existingConfig) return; // Ya está inyectado
+
+    const wrapper = document.createElement("div");
+    wrapper.id = "injected-config";
+    wrapper.className = "mb-3 p-3 bg-white text-dark rounded border";
+    wrapper.style.textAlign = "left";
+    wrapper.innerHTML = "<h5>⚙️ Configuración:</h5><small>Elegí categorías:</small>";
+
+    // Generar checkboxes
+    if (window.PERSONAJES) {
+        Object.keys(window.PERSONAJES).forEach(cat => {
+            wrapper.innerHTML += `
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" value="${cat}" id="cat_${cat}" checked>
+                  <label class="form-check-label" for="cat_${cat}">${cat}</label>
+                </div>`;
+        });
+    } else {
+        wrapper.innerHTML += "<p class='text-danger'>Falta archivo personajes.js</p>";
+    }
+
+    // Insertar ANTES del botón de iniciar
+    const btn = container.querySelector("button");
+    container.insertBefore(wrapper, btn);
 }
 
 function renderPanelVotacion(els) {
     els.voteArea.style.display = 'block';
 
-    // Si estoy muerto, solo veo resultados parciales
+    // Si estoy muerto, veo progreso
     if (!STATE.me.alive) {
-        document.getElementById("votePlayers").innerHTML = "<p>Esperando que los vivos voten...</p>";
+        document.getElementById("votePlayers").innerHTML = "<p>Esperando votación...</p>";
         renderVotosParciales();
         return;
     }
@@ -338,13 +335,13 @@ function renderPanelVotacion(els) {
         document.getElementById("votePlayers").innerHTML = `<div class="alert alert-success">Votaste a: <strong>${target ? target.name : 'Unknown'}</strong></div>`;
         renderVotosParciales();
     } else {
-        // Botones para votar (solo a vivos)
+        // Botones para votar
         const vivos = STATE.players.filter(p => p.alive && p.id !== STATE.me.id);
         let html = vivos.map(p =>
             `<button class="btn btn-outline-danger w-100 my-1" onclick="enviarVoto('${p.id}')">Votar a ${p.name}</button>`
         ).join("");
 
-        if (vivos.length === 0) html = "<p>No hay a quién votar (Bug?)</p>";
+        if (vivos.length === 0) html = "<p class='text-muted'>Solo quedás vos (o error).</p>";
 
         document.getElementById("votePlayers").innerHTML = html;
         document.getElementById("votoPropioBox").style.display = 'none';
@@ -356,12 +353,10 @@ function renderVotosParciales() {
     const vivosCount = STATE.players.filter(p => p.alive).length;
     const votosCount = STATE.votes.length;
 
-    // Mostrar quiénes faltan (opcional, simplificado a contador)
-    const msg = `Votos: ${votosCount} / ${vivosCount}`;
-    document.getElementById("quienFaltaBox").innerHTML = msg;
+    document.getElementById("quienFaltaBox").innerHTML = `Votos: ${votosCount} / ${vivosCount}`;
     document.getElementById("quienFaltaBox").style.display = 'block';
 
-    // Mostrar lista de votos confirmados (públicos)
+    // Lista de votos
     let htmlResult = "<h4>Votos emitidos:</h4>";
     STATE.votes.forEach(v => {
         const voter = STATE.players.find(p => p.id === v.voter_id);
@@ -382,13 +377,13 @@ function renderVotosParciales() {
 async function iniciarJuego() {
     showMessage("Asignando roles...");
 
-    // Lógica de palabras
-    const inputs = document.querySelectorAll("#categorias input:checked");
+    // Buscar checkboxes dentro de nuestro contenedor inyectado
+    const inputs = document.querySelectorAll("#injected-config input:checked");
     const seleccionadas = Array.from(inputs).map(i => i.value);
 
     if (seleccionadas.length === 0) {
         hideMessage();
-        return alert("Seleccioná categorías primero.");
+        return alert("¡Seleccioná al menos una categoría!");
     }
 
     let pool = [];
@@ -396,14 +391,14 @@ async function iniciarJuego() {
         if (window.PERSONAJES[cat]) pool = pool.concat(window.PERSONAJES[cat]);
     });
 
-    if (pool.length === 0) pool = ["Default"];
+    // Fallback por si pool está vacío
+    if (pool.length === 0) pool = ["Error: Sin palabras"];
     const palabra = pool[Math.floor(Math.random() * pool.length)];
 
     // Asignar roles
     const playersIds = STATE.players.map(p => p.id);
     const impostorId = playersIds[Math.floor(Math.random() * playersIds.length)];
 
-    // Updates en paralelo
     const updates = STATE.players.map(p => {
         return supabase.from("players").update({
             role: (p.id === impostorId) ? 'impostor' : 'player',
@@ -413,7 +408,6 @@ async function iniciarJuego() {
 
     await Promise.all(updates);
 
-    // Iniciar Room
     await supabase.from("rooms").update({
         started: true,
         voting: false,
@@ -425,50 +419,40 @@ async function iniciarJuego() {
     hideMessage();
 }
 
-// 2. INICIAR VOTACIÓN (Host)
+// 2. INICIAR VOTACIÓN
 async function iniciarVotacion() {
-    // Limpiar votos viejos por seguridad
     await supabase.from("votes").delete().eq("room_id", STATE.room.id);
-
-    // Activar estado voting
     await supabase.from("rooms").update({
         voting: true,
         resultado_texto: null
     }).eq("id", STATE.room.id);
 }
 
-// 3. ENVIAR VOTO (Player)
+// 3. ENVIAR VOTO
 async function enviarVoto(targetId) {
     if (!STATE.me.alive) return;
-
     await supabase.from("votes").insert({
         room_id: STATE.room.id,
         voter_id: STATE.me.id,
         target_id: targetId
     });
-    // El realtime actualizará la UI
 }
 
-// 4. CHECK FINALIZAR VOTACIÓN (Host Automático)
+// 4. CHECK FINALIZAR VOTACIÓN
 async function checkVotacionCompletaHost() {
     const vivos = STATE.players.filter(p => p.alive);
     const votos = STATE.votes;
 
-    // Si todos votaron
+    // Usamos >= para evitar bloqueos si hay lag
     if (vivos.length > 0 && votos.length >= vivos.length) {
-        console.log("Votación completa. Calculando resultados...");
         await procesarVotacion();
     }
 }
 
 async function procesarVotacion() {
-    // Conteo
     const conteo = {};
-    STATE.votes.forEach(v => {
-        conteo[v.target_id] = (conteo[v.target_id] || 0) + 1;
-    });
+    STATE.votes.forEach(v => conteo[v.target_id] = (conteo[v.target_id] || 0) + 1);
 
-    // Encontrar el más votado
     let maxVotos = -1;
     let eliminadoId = null;
 
@@ -479,46 +463,37 @@ async function procesarVotacion() {
         }
     });
 
-    // Verificar empate (Simplificado: si hay empate, muere el primero encontrado.
-    // Idealmente podrías manejar empate, pero para estabilizar eliminamos siempre).
-    if (!eliminadoId) return; // Nadie votó? Raro.
+    if (!eliminadoId) return;
 
     const eliminado = STATE.players.find(p => p.id === eliminadoId);
-
-    // Marcar muerto en DB
     await supabase.from("players").update({ alive: false }).eq("id", eliminadoId);
 
-    // Generar Texto de Resultado
     let resultadoHTML = "";
     let estadoJuego = "continua";
 
     if (eliminado.role === 'impostor') {
         resultadoHTML = `<div class="alert alert-success">
-            <h1>🎉 GANARON LOS CIUDADANOS 🎉</h1>
-            <p>El impostor era <strong>${eliminado.name}</strong> y fue eliminado.</p>
+            <h1>🎉 CIUDADANOS GANAN 🎉</h1>
+            <p>El impostor <strong>${eliminado.name}</strong> ha sido eliminado.</p>
         </div>`;
         estadoJuego = "fin";
     } else {
-        // Chequear si ganan impostores (Quedan 2 vivos: 1 impostor y 1 player)
-        // Restamos 1 porque acabamos de matar a un inocente
         const vivosRestantes = STATE.players.filter(p => p.alive && p.id !== eliminadoId).length;
-
         if (vivosRestantes <= 2) {
-             const impostor = STATE.players.find(p => p.role === 'impostor'); // El impostor sigue vivo
+             const impostor = STATE.players.find(p => p.role === 'impostor');
              resultadoHTML = `<div class="alert alert-danger">
-                <h1>🔪 GANÓ EL IMPOSTOR 🔪</h1>
-                <p>Quedan pocos sobrevivientes. El impostor era <strong>${impostor ? impostor.name : '???'}</strong>.</p>
+                <h1>🔪 IMPOSTOR GANA 🔪</h1>
+                <p>Impostor: <strong>${impostor ? impostor.name : '???'}</strong></p>
              </div>`;
              estadoJuego = "fin";
         } else {
             resultadoHTML = `<div class="alert alert-warning">
-                <h3>🚫 ${eliminado.name} fue eliminado.</h3>
+                <h3>🚫 ${eliminado.name} eliminado.</h3>
                 <p>Era un ciudadano inocente.</p>
             </div>`;
         }
     }
 
-    // Actualizar Room para mostrar resultados y cortar votación
     await supabase.from("rooms").update({
         voting: false,
         estado: estadoJuego,
@@ -526,19 +501,11 @@ async function procesarVotacion() {
     }).eq("id", STATE.room.id);
 }
 
-// 5. NUEVA RONDA (Host)
+// 5. NUEVA RONDA
 async function nuevaRonda() {
     showMessage("Reseteando partida...");
-
-    // 1. Limpiar votos
     await supabase.from("votes").delete().eq("room_id", STATE.room.id);
-
-    // 2. Revivir jugadores y limpiar roles (NO borrarlos)
-    await supabase.from("players")
-        .update({ alive: true, role: null })
-        .eq("room_id", STATE.room.id);
-
-    // 3. Resetear Room al estado Lobby
+    await supabase.from("players").update({ alive: true, role: null }).eq("room_id", STATE.room.id);
     await supabase.from("rooms").update({
         started: false,
         voting: false,
@@ -546,7 +513,5 @@ async function nuevaRonda() {
         estado: null,
         resultado_texto: null
     }).eq("id", STATE.room.id);
-
     hideMessage();
-    // El realtime detectará started: false y llamará a renderUI, que mostrará el Lobby.
 }
