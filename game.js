@@ -427,37 +427,67 @@ async function checkVotacionCompletaHost() {
 }
 
 async function procesarVotacion() {
+    // 1. Contar votos
     const conteo = {};
     STATE.votes.forEach(v => conteo[v.target_id] = (conteo[v.target_id] || 0) + 1);
 
+    // 2. Buscar al más votado
     let maxVotos = -1;
     let eliminadoId = null;
+
     Object.keys(conteo).forEach(id => {
-        if (conteo[id] > maxVotos) { maxVotos = conteo[id]; eliminadoId = id; }
+        if (conteo[id] > maxVotos) {
+            maxVotos = conteo[id];
+            eliminadoId = id;
+        }
     });
 
-    if (!eliminadoId) return; // Empate o error
+    if (!eliminadoId) return; // Nadie votó (raro)
 
     const eliminado = STATE.players.find(p => p.id === eliminadoId);
+
+    // 3. Ejecutar muerte en DB
     await supabase.from("players").update({ alive: false }).eq("id", eliminadoId);
+
+    // 4. LÓGICA DE VICTORIA CORREGIDA
+    // Calculamos quiénes quedan vivos AHORA (excluyendo al que acaba de morir)
+    const sobrevivientes = STATE.players.filter(p => p.alive && p.id !== eliminadoId);
+
+    const cantImpostores = sobrevivientes.filter(p => p.role === 'impostor').length;
+    const cantCiudadanos = sobrevivientes.filter(p => p.role === 'player').length;
 
     let html = "";
     let nuevoEstado = "continua";
 
-    if (eliminado.role === 'impostor') {
-        html = `<div class="alert alert-success"><h1>🎉 GANARON LOS CIUDADANOS</h1><p>El impostor era <b>${eliminado.name}</b></p></div>`;
+    // CASO A: Ganan Ciudadanos (Mataron al último impostor)
+    if (eliminado.role === 'impostor' && cantImpostores === 0) {
+        html = `<div class="alert alert-success">
+                    <h1>🎉 GANARON LOS CIUDADANOS</h1>
+                    <p>El impostor era <b>${eliminado.name}</b>.</p>
+                </div>`;
         nuevoEstado = "fin";
-    } else {
-        const vivosRestantes = STATE.players.filter(p => p.alive && p.id !== eliminadoId).length;
-        if (vivosRestantes <= 2) {
-            const imp = STATE.players.find(p => p.role === 'impostor');
-            html = `<div class="alert alert-danger"><h1>🔪 GANÓ EL IMPOSTOR</h1><p>Impostor: <b>${imp?.name}</b></p></div>`;
-            nuevoEstado = "fin";
-        } else {
-            html = `<div class="alert alert-warning"><h3>🚫 Eliminado: ${eliminado.name}</h3><p>Era un ciudadano inocente.</p></div>`;
-        }
+    }
+    // CASO B: Ganan Impostores (Quedan igual o más impostores que ciudadanos)
+    // Ejemplo: 1 Impostor vs 1 Ciudadano -> Gana Impostor inmediatamente.
+    else if (cantImpostores >= cantCiudadanos) {
+        // Buscamos el nombre de algún impostor vivo para mostrar
+        const impName = sobrevivientes.find(p => p.role === 'impostor')?.name || "El Impostor";
+
+        html = `<div class="alert alert-danger">
+                    <h1>🔪 GANÓ EL IMPOSTOR</h1>
+                    <p>Ya no pueden echarlo. Victoria para <b>${impName}</b>.</p>
+                </div>`;
+        nuevoEstado = "fin";
+    }
+    // CASO C: Sigue el juego
+    else {
+        html = `<div class="alert alert-warning">
+                    <h3>🚫 ${eliminado.name} fue eliminado</h3>
+                    <p>Era ${eliminado.role === 'impostor' ? 'Impostor' : 'Inocente'}.</p>
+                </div>`;
     }
 
+    // 5. Guardar resultado
     await supabase.from("rooms").update({
         voting: false,
         estado: nuevoEstado,
