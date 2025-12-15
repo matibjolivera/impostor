@@ -188,6 +188,10 @@ async function actualizarJugadores() {
 async function iniciarJuego() {
     if (!IS_HOST) return;
 
+    showMessage("🔄 Preparando partida… asignando roles, palabra y reiniciando estado…");
+
+    await new Promise(r => setTimeout(r, 200)); // pequeño delay visual
+
     console.log("[JUEGO] Iniciando...");
 
     document.getElementById("stepHostConfig").style.display = "none";
@@ -243,7 +247,8 @@ async function iniciarJuego() {
 
     document.getElementById("startVoteControls").style.display = "block";
 
-    mostrarRol();
+    await mostrarRol();
+    hideMessage();
 }
 
 /* ============================================
@@ -271,7 +276,7 @@ async function processRoomUpdate() {
         .eq("id", ROOM_ID)
         .single();
 
-    if (room.started) mostrarRol();
+    if (room.started) await mostrarRol();
 
     if (room.voting) {
         console.log("[VOTACION] Activa");
@@ -336,9 +341,9 @@ async function mostrarRol() {
    INICIAR VOTACIÓN
 ============================================ */
 async function iniciarVotacion() {
-    console.log("[VOTACION] Iniciando...");
-
     if (!IS_HOST) return;
+
+    showMessage("🗳️ Iniciando votación… limpiando votos anteriores…");
 
     await supabase.from("votes").delete().eq("room_id", ROOM_ID);
 
@@ -350,14 +355,17 @@ async function iniciarVotacion() {
         })
         .eq("id", ROOM_ID);
 
-    resetUIVotacion();
+    await resetUIVotacion();
+    await new Promise(r => setTimeout(r, 200));
+
+    hideMessage();
 }
 
 /* ============================================
    MOSTRAR PANEL
 ============================================ */
 async function mostrarPanelVotacion() {
-    console.log("[UI] Mostrar panel votación");
+    showMessage("🎯 Cargando panel de votación…");
 
     limpiarUIVotos();
     document.getElementById("voteArea").style.display = "block";
@@ -367,6 +375,10 @@ async function mostrarPanelVotacion() {
         .select("*")
         .eq("room_id", ROOM_ID)
         .eq("alive", true);
+
+    await new Promise(r => setTimeout(r, 150));
+
+    hideMessage();
 
     let html = "";
     players.forEach(p => {
@@ -458,6 +470,7 @@ function escucharVotos() {
    VOTAR
 ============================================ */
 async function votar(targetId) {
+    showMessage("📨 Enviando tu voto…");
     console.log("[VOTAR] Player vota:", PLAYER_ID, "->", targetId);
 
     await supabase.from("votes").insert({
@@ -465,6 +478,8 @@ async function votar(targetId) {
         voter_id: PLAYER_ID,
         target_id: targetId
     });
+
+    showMessage("📨 Enviando tu voto…");
 
     document.getElementById("votePlayers").innerHTML =
         `<p class="text-success">⏳ Esperando al resto...</p>`;
@@ -594,6 +609,8 @@ function mostrarResultadoGlobal(html) {
 async function nuevaRonda() {
     console.log("[RONDA] Nueva ronda...");
 
+    showMessage("🔄 Comenzando nueva ronda… reiniciando jugadores y estado…");
+
     if (!IS_HOST) return;
 
     await supabase.from("rooms")
@@ -611,6 +628,10 @@ async function nuevaRonda() {
         .eq("room_id", ROOM_ID);
 
     resetUIVotacion();
+
+    await new Promise(r => setTimeout(r, 250));
+
+    hideMessage();
 
     document.getElementById("stepHostConfig").style.display = "block";
     document.getElementById("hostControls").style.display = "block";
@@ -647,4 +668,16 @@ function limpiarUIVotos() {
     document.getElementById("votoPropioBox").style.display = "none";
     document.getElementById("voteResults").innerHTML = "";
     document.getElementById("quienFaltaBox").innerHTML = "";
+}
+
+function showMessage(msg) {
+    const box = document.getElementById("systemMessage");
+    box.innerHTML = msg;
+    box.style.display = "block";
+}
+
+function hideMessage() {
+    const box = document.getElementById("systemMessage");
+    box.style.display = "none";
+    box.innerHTML = "";
 }
