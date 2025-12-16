@@ -175,7 +175,7 @@ async function sincronizarEstado() {
 }
 
 /* ============================================
-   RENDER UI
+   RENDER UI (LA MÁQUINA DE ESTADOS)
 ============================================ */
 function renderUI() {
     showView(ROUTES.GAME);
@@ -222,38 +222,33 @@ function renderUI() {
         return;
     }
 
-    // --- 3. PANTALLA DE RESULTADOS ---
+    // --- 3. PANTALLA DE RESULTADOS (FIX V7) ---
     if (STATE.room.resultado_texto && STATE.room.estado !== null) {
         els.voteResults.innerHTML = STATE.room.resultado_texto;
         els.voteResults.style.display = 'block';
 
         if (STATE.isHost) {
+            // FIX: Reconstruir botones desde CERO para evitar duplicados
             els.newRoundControls.style.display = 'block';
-            const btn = els.newRoundControls.querySelector("button");
-
-            // Limpiar botón extra si existe (para evitar duplicados visuales)
-            const existingExtra = document.getElementById("btn-continue");
-            if (existingExtra) existingExtra.style.display = 'none';
+            let buttonsHTML = '';
 
             if (STATE.room.estado === 'fin') {
-                btn.innerHTML = "🔄 NUEVA PARTIDA (Reset Total)";
-                btn.className = "btn btn-success w-100";
-                btn.onclick = nuevaRonda;
+                // Partida terminada -> Solo Reset
+                buttonsHTML = `<button class="btn btn-success w-100 py-3 fw-bold" onclick="nuevaRonda()">🔄 NUEVA PARTIDA (Reset Total)</button>`;
             } else {
-                btn.innerHTML = "⚠️ REINICIAR DE CERO";
-                btn.className = "btn btn-secondary w-100 mt-2";
-                btn.onclick = nuevaRonda;
-
-                // Mostrar botón continuar
-                if (existingExtra) {
-                    existingExtra.style.display = 'block';
-                } else {
-                    injectContinueButton(els.newRoundControls);
-                }
+                // Partida sigue -> Continuar o Reset
+                buttonsHTML = `
+                    <button class="btn btn-primary w-100 mb-2 py-3 fw-bold" onclick="continuarJugando()">▶️ CONTINUAR JUGANDO</button>
+                    <button class="btn btn-secondary w-100" onclick="nuevaRonda()">⚠️ REINICIAR DE CERO</button>
+                `;
             }
+            // Inyección limpia
+            els.newRoundControls.innerHTML = buttonsHTML;
+
         } else {
+            // Guest
             if (STATE.room.estado === 'continua') {
-                els.voteResults.innerHTML += "<p class='mt-2 text-muted'>Esperando al Host...</p>";
+                els.voteResults.innerHTML += "<p class='mt-3 text-muted fw-bold'>Esperando al Host...</p>";
             }
         }
         return;
@@ -280,7 +275,7 @@ function renderUI() {
     }
 }
 
-// FIX: Verificar existencia antes de inyectar para evitar duplicados
+// INYECCIÓN SEGURA DE CONFIG (Lobby)
 function injectHostConfig() {
     const container = document.getElementById("hostControls");
     if (!container || document.getElementById("injected-config")) return;
@@ -300,18 +295,6 @@ function injectHostConfig() {
         });
     }
     container.insertBefore(wrapper, container.firstChild);
-}
-
-// FIX: Verificar existencia antes de crear botón continuar
-function injectContinueButton(container) {
-    if (document.getElementById("btn-continue")) return; // Ya existe, no crear otro
-
-    const btn = document.createElement("button");
-    btn.id = "btn-continue";
-    btn.className = "btn btn-primary w-100 mb-2";
-    btn.innerHTML = "▶️ CONTINUAR JUGANDO";
-    btn.onclick = continuarJugando;
-    container.insertBefore(btn, container.firstChild);
 }
 
 function renderPanelVotacion(els) {
@@ -391,7 +374,6 @@ async function iniciarJuego() {
 }
 
 async function iniciarVotacion() {
-    // FIX: Limpiar localmente primero para evitar parpadeos
     STATE.votes = [];
     await supabase.from("votes").delete().eq("room_id", STATE.room.id);
     await supabase.from("rooms").update({ voting: true, resultado_texto: null }).eq("id", STATE.room.id);
@@ -413,7 +395,6 @@ async function checkVotacionCompletaHost() {
     const vivos = STATE.players.filter(p => p.alive);
     const votos = STATE.votes;
 
-    // FIX: Asegurar que haya al menos 1 voto para no disparar con arrays vacíos tras reset
     if (vivos.length > 0 && votos.length >= vivos.length && votos.length > 0) {
         await procesarVotacion();
     }
@@ -434,7 +415,7 @@ async function procesarVotacion() {
     const eliminado = STATE.players.find(p => p.id === eliminadoId);
     await supabase.from("players").update({ alive: false }).eq("id", eliminadoId);
 
-    // Lógica Ganador V5 Fix
+    // Lógica Ganador
     const sobrevivientes = STATE.players.filter(p => p.alive && p.id !== eliminadoId);
     const cantImpostores = sobrevivientes.filter(p => p.role === 'impostor').length;
     const cantCiudadanos = sobrevivientes.filter(p => p.role === 'player').length;
@@ -443,11 +424,11 @@ async function procesarVotacion() {
     let nuevoEstado = "continua";
 
     if (eliminado.role === 'impostor' && cantImpostores === 0) {
-        html = `<div class="alert alert-success"><h1>🎉 GANARON LOS CIUDADANOS</h1><p>El impostor era <b>${eliminado.name}</b></p></div>`;
+        html = `<div class="alert alert-success"><h1>🎉 CIUDADANOS GANAN</h1><p>El impostor era <b>${eliminado.name}</b></p></div>`;
         nuevoEstado = "fin";
     } else if (cantImpostores >= cantCiudadanos) {
         const imp = sobrevivientes.find(p => p.role === 'impostor');
-        html = `<div class="alert alert-danger"><h1>🔪 GANÓ EL IMPOSTOR</h1><p>Victoria para <b>${imp?.name || "???"}</b></p></div>`;
+        html = `<div class="alert alert-danger"><h1>🔪 IMPOSTOR GANA</h1><p>Victoria para <b>${imp?.name || "???"}</b></p></div>`;
         nuevoEstado = "fin";
     } else {
         html = `<div class="alert alert-warning"><h3>🚫 Eliminado: ${eliminado.name}</h3><p>Era ${eliminado.role === 'impostor' ? 'Impostor' : 'Inocente'}.</p></div>`;
@@ -464,18 +445,12 @@ async function procesarVotacion() {
 
 async function nuevaRonda() {
     showMessage("Reiniciando partida...");
-
-    // FIX CRÍTICO: Limpiar memoria local INSTANTÁNEAMENTE para que el checkVotacion no lea basura
     STATE.votes = [];
     STATE.room.voting = false;
 
-    // 1. Borrar votos en DB
     await supabase.from("votes").delete().eq("room_id", STATE.room.id);
-
-    // 2. Revivir jugadores
     await supabase.from("players").update({ alive: true, role: null }).eq("room_id", STATE.room.id);
 
-    // 3. Resetear Sala (Esto dispara el cambio de vista a Lobby)
     await supabase.from("rooms").update({
         started: false,
         voting: false,
@@ -489,8 +464,6 @@ async function nuevaRonda() {
 
 async function continuarJugando() {
     showMessage("Siguiente turno...");
-
-    // FIX: Limpieza local preventiva
     STATE.votes = [];
 
     await supabase.from("votes").delete().eq("room_id", STATE.room.id);
